@@ -77,13 +77,13 @@ Admin tại `/admin/banners`, `/admin/course-sections`, `/admin/courses`: thêm,
 
 ## Quiz Builder (09/10/2026)
 
-Apply `0005_quiz_builder.sql` after 0004. Fresh installs can use the consolidated `schema.sql` instead of the migration chain; apply `seed.sql` only after all six migrations. Seed has eight participant field types and three question types. Do not reseed an active production quiz with participant history.
+Apply `0005_quiz_builder.sql` after 0004. Fresh installs can use the consolidated `schema.sql` instead of the migration chain; apply `seed.sql` only after the complete migration chain. Seed has eight participant field types and three question types. Do not reseed an active production quiz with participant history.
 
 `/admin/quizzes` lists real records; `/new` creates a quiz; `/{id}`, `/{id}/fields`, `/{id}/questions`, `/{id}/settings` load the admin document. The tabs keep edits in memory; Save quiz persists the entire document atomically. Required content, unique slugs/field keys, one identifier, schedules, points, option correctness and accepted-answer normalization are validated on client and server. Dates use the browser timezone and are stored as timestamptz. Blank duration/attempt limit means unlimited. `show_rank` in the builder maps to the existing `show_ranking` database column.
 
 Passwords are hashed server-side with scrypt and a unique 128-bit salt; no plaintext or hash is returned to the editor. Blank password preserves the current hash; Remove password clears it. SQL rejects unrecognized hash formats and password fields in document payloads. Admin-only RPC `admin_quiz_document` reads full answer keys; public question/option views remain strict allowlists. `admin_save_quiz` checks membership again, locks the quiz, checks updated_at, and replaces fields/questions/options/accepted answers in one transaction. Only trusted admin RPC can write these tables.
 
-The runtime now captures attempt snapshots. Builder still protects the original FK history by blocking content/field/password changes after attempts; status and visibility remain editable. Start uses the same quiz lock as builder saves and the same participant validator as preview. Result Block Builder/analytics remain separate work.
+The runtime now captures attempt snapshots. Builder still protects the original FK history by blocking content/field/password changes after attempts; status and visibility remain editable. Start uses the same quiz lock as builder saves and the same participant validator as preview. Result Block Builder is documented below; analytics remains separate work.
 
 Validation: `npm run verify`; `npm run test:quiz-builder` runs Chromium against the actual app and a PostgreSQL WASM-backed HTTP fixture. It covers all eight field types, all three question types, save/reload, reorder, points, delete, preview and server password hashing. This is not a Supabase cloud/PostgREST integration test.
 
@@ -103,3 +103,16 @@ Result access requires the owning session. Score/correct/wrong counters follow s
 
 Run `npm run verify`, `npm run test:public-quiz`, and `npm run test:smoke`. The public quiz E2E runs the production Next server against a local HTTP fixture backed by real PostgreSQL WASM and exercises the seeded quiz start→3/3 result→leaderboard, wrong/correct/no password, rate limits, CSRF, ownership, reload, duplicate and late submissions. It also scans HTML/RSC/API/bundles for a private seeded answer marker and server secrets. Tests validate locking logic and repeated requests on PGlite; multi-connection PostgreSQL contention and live Supabase Auth/PostgREST integration still require a provisioned project.
 
+
+
+## Result Page Builder (migrations 0007 and 0008)
+
+Existing deployments: apply `0007_result_builder.sql` after 0006, then `0008_result_builder_validation.sql`. If 0007 is already installed, apply only 0008. Fresh installs can use the complete migration chain or `schema.sql`, never both. Back up an existing database before migration. Do not reseed quizzes with participant history.
+
+Open `/admin/quizzes/{id}/result-page`. Add text, YouTube, external link, button or image blocks; choose a block to edit, move it with the arrow buttons, or remove it. Save persists the full ordered document in a transaction with optimistic revision checks. Images use validated HTTP(S) URLs. Text is plain React text, not HTML. YouTube watch, youtu.be and embed URLs are reduced to an 11-character video ID and rebuilt on `https://www.youtube-nocookie.com/embed/`; extra query parameters are discarded.
+
+Block visibility is checked in PostgreSQL for each owned submitted result. `after_submit` appears immediately, `after_quiz_closed` requires closed status or a passed close_at, and `scheduled_at` requires the DB clock to reach the saved timestamp. The editor uses your browser's timezone and stores UTC. Preview intentionally shows every block and illustrative metrics. Reload the result page after a schedule boundary or an admin edit to see fresh content.
+
+Score, rank and answer-detail permissions are controlled in Quiz Settings, including after attempts exist. The result editor additionally controls percentage, correct count, wrong count and duration. Disabling score also hides percentage and counts. Answer details require both admin permission and quiz closure; server responses omit the answer keys before that gate. Result blocks are read live from their own tables, so changing a correction video never rewrites attempts, their snapshots, grading, answers, or quiz revision. Admin write RPC validates the document independently of the UI; direct table access and the old unvalidated RPC are unavailable to public/authenticated callers.
+
+Run `npm run verify`, then `npm run test:result-builder`. The latter exercises the production app with a local Supabase-shaped HTTP adapter backed by PostgreSQL WASM, not a Supabase cloud project. It covers all five block types, invalid URL, save/reload/edit/reorder/delete, escaped script text, hidden scheduled content, correction-video replacement after submission and answer-review permissions. Screenshots are written at 375, 768 and 1440px under `artifacts/result-builder`. Install Chromium with `npx playwright install chromium`; `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` can select an existing compatible browser without changing dependencies. Live Auth/PostgREST and multi-connection concurrency must still be checked against a configured Supabase project.

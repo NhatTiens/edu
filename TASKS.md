@@ -39,7 +39,7 @@ Cập nhật: 09/10/2026, múi giờ Việt Nam. Giữ visual của frontend hi�
 - [x] Nối banner, category, thumbnail và course link vào homepage/search từ Supabase thật.
 - [x] Thiết lập Storage bucket/policy cho banner/thumbnail, giới hạn MIME/kích thước, preview và dọn file upload lỗi.
 - [x] CRUD quizzes/fields/questions/options/accepted answers trong transaction; builder dùng UUID thật.
-- [ ] Result Block Builder còn thuộc P4, chưa nối persistence.
+- [x] Result Block Builder nối RPC Supabase, lưu nguyên tử và kiểm tra revision; xem kết quả P4 bên dưới.
 - [x] Bổ sung schema cho branding/site settings, participant identity digest/session fields, accepted answers và cấu hình quiz result; leaderboard display field còn phụ thuộc product decision.
 - [x] Hoàn thiện builder ba dạng câu hỏi, điểm, thứ tự, thêm/xóa/lưu/preview; không đưa đáp án vào DTO public.
 - [ ] Chốt version/snapshot đề khi publish và khi bắt đầu làm, để sửa đề không đổi điểm của attempt đang chạy.
@@ -64,7 +64,7 @@ Cập nhật: 09/10/2026, múi giờ Việt Nam. Giữ visual của frontend hi�
 - [x] Timer lấy mốc server, tự submit, resume, retry mạng và xử lý hết giờ ở server.
 - [x] Result/leaderboard từ DB: score DESC, duration_ms ASC, submitted_at ASC; tie-break cuối ổn định.
 - [x] Tuân thủ show_score/show_ranking/show_correct_answers; mặc định không công khai thông tin Facebook/email/identity.
-- [ ] Result blocks text/YouTube/link/button/image, visibility after_submit/after_quiz_closed/scheduled_at và allowlist URL.
+- [x] Result blocks text/YouTube/link/button/image, visibility after_submit/after_quiz_closed/scheduled_at và allowlist URL.
 
 ## P5 · Analytics và release; phụ thuộc P4
 
@@ -104,7 +104,7 @@ CMS verification: npm run verify (typecheck/lint/10 tests/production build) PASS
 - [ ] Supabase live: áp dụng 0005, seed trên môi trường demo/staging, kiểm tra Auth/PostgREST với credential thật (workspace chưa có).
 - [x] Attempt snapshot, unlock/start/submit, participant validation/attempt limit và result rendering hoàn tất trong runtime 0006. Builder vẫn khóa sửa nội dung quiz có attempts.
 
-Kiểm thử lượt này: typecheck, lint, tests liên quan và production build đã pass. Result Block Builder và analytics vẫn là scaffold được ghi rõ; không đánh dấu hoàn tất các module đó.
+Kiểm thử lượt này: typecheck, lint, tests liên quan và production build đã pass. Analytics vẫn là scaffold; Result Block Builder đã được tiếp tục trong lượt P4 bên dưới.
 
 
 ## Public quiz runtime — kết quả 09/10/2026
@@ -116,8 +116,22 @@ Kiểm thử lượt này: typecheck, lint, tests liên quan và production buil
 - [x] Ranking và visibility flags; answer review chỉ sau owner submit + quiz closure; leaderboard chỉ có tên được admin chọn hiển thị.
 - [x] Quiz seed chạy browser E2E start→result 3/3→leaderboard. Test thêm mật khẩu, rate limit, CSRF, quota, reload, duplicate/late submit, HTML/RSC/API/bundle leakage marker.
 - [ ] Apply migration 0006 + cấu hình service key/QUIZ_SESSION_SECRET trên Supabase live; kiểm thử multi-connection PostgreSQL concurrency và PostgREST deployment thật.
-- [ ] Result Blocks CMS/rendering và analytics chưa thuộc lượt này. Builder vẫn khóa sửa nội dung quiz có attempts dù runtime đã có snapshot, để bảo toàn FK/history.
+- [ ] Analytics chưa thuộc lượt này; Result Blocks CMS/rendering xem kết quả P4 bên dưới. Builder vẫn khóa sửa nội dung quiz có attempts dù runtime đã có snapshot, để bảo toàn FK/history.
 
 Giới hạn identity: khi không cấu hình identifier, attempt_limit theo signed browser cookie (có thể thay cookie/thiết bị). Identifier hiện do người dùng khai báo; xác thực người thật cần Auth/OTP. Hết hạn tự finalize khi có request tiếp theo; chưa có background sweeper. Xem README runtime để vận hành.
 
 Kiểm chứng public runtime: typecheck/lint/build pass; unit/database suite 18 tests; seed E2E browser + PostgreSQL WASM đạt 3/3 và leaderboard. Không có credential Supabase live trong workspace.
+
+
+## Result Page Builder — tiếp tục 09/10/2026
+
+- [x] Review implementation 0007 hiện có; giữ repository/RPC thật, không fallback mock.
+- [x] Admin thêm/sửa/xóa/reorder năm loại block; lịch theo giờ máy, persist UTC, preview, unsaved indicator, lỗi validation và optimistic revision.
+- [x] Ba dạng YouTube URL chuẩn hóa thành youtube-nocookie embed; external URL chỉ http/https, không credentials/backslash; text render qua React, không HTML tùy ý.
+- [x] Server lọc visibility bằng clock của DB; chỉ session sở hữu attempt đã submit nhận blocks. Answer details cần Admin cho phép và quiz đã đóng.
+- [x] Score/rank/answer details theo cấu hình quiz; percentage/correct/wrong/duration có công tắc riêng. Tắt show_score ẩn các chỉ số điểm liên quan.
+- [x] Migration 0008 chặn payload thiếu/null/wrong type, revision thiếu, lịch không xác định, giới hạn nội dung và ID trùng trước transaction ghi; không cho gọi RPC cũ để bỏ qua validation.
+- [x] Đồng bộ schema.sql với 0007 + 0008; kiểm thử cài mới, quyền RPC/RLS, rollback payload lỗi, không thay đổi attempt/answers/revision quiz sau sửa video, quyền xem và lịch.
+- [ ] Áp dụng 0007 + 0008 trên Supabase live và kiểm thử Auth/PostgREST với thông tin kết nối thật; workspace chưa có credential.
+
+Kiểm chứng lượt Result Builder: `npm run verify` PASS (typecheck, lint, 21 tests và production build). `npm run test:result-builder` PASS với Chromium Headless Shell và PostgreSQL WASM HTTP fixture; admin/result ở 375/768/1440 không overflow ngang. Ảnh chụp hiện tại nằm trong `artifacts/result-builder/`. Đây không phải kiểm thử Supabase live.
