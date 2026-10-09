@@ -13,5 +13,5 @@ export async function createClient() {
       // Server Components cannot write cookies. proxy.ts refreshes them before rendering.
     }
   };
-  return createServerClient<Database>(url, key, { cookies: { getAll: () => cookieStore.getAll(), setAll } });
+  return createServerClient<Database>(url, key, { cookieOptions: { httpOnly: true, sameSite: 'lax', secure: process.env.NEXT_PUBLIC_SITE_URL?.startsWith('https://') ?? process.env.NODE_ENV === 'production' }, cookies: { getAll: () => cookieStore.getAll(), setAll } });
 }

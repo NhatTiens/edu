@@ -1,5 +1,7 @@
 # EduQuiz Platform
 
+Security audit: see `SECURITY.md`. Apply `0010_security_audit.sql` after 0009. Admin login now also requires the server service key and QUIZ_SESSION_SECRET for shared rate limiting. Configure the exact HTTPS NEXT_PUBLIC_SITE_URL in production (HTTP only for loopback development). Uploads are decoded and converted to WebP before Storage. No participant, password or token payload is logged.
+
 Ứng dụng Next.js App Router + TypeScript + Supabase cho khóa học và kiểm tra trực tuyến. Frontend gốc được giữ làm chuẩn visual. Đây là bản đang triển khai, chưa phải release production.
 
 ## Chạy local

@@ -1,9 +1,10 @@
 "use server";
 import { randomUUID } from 'node:crypto';
+import { sanitizeImage } from '@/lib/services/image-upload';
 import type { CourseRow, BannerRow, SectionRow } from '@/lib/supabase/database.types';
 import { revalidatePath } from 'next/cache';
 import { cmsClient } from '@/lib/repositories/cms';
-import { cmsPayload, cmsTables, IMAGE_LIMIT, IMAGE_TYPES, type CmsKind, type CmsResult } from '@/lib/cms';
+import { cmsPayload, cmsTables, type CmsKind, type CmsResult } from '@/lib/cms';
 
 export async function mutateCms(kind: CmsKind, operation: string, form: FormData): Promise<CmsResult> {
   if (process.env.APP_DATA_MODE === 'demo') return { ok: false, message: 'CMS chỉ ghi dữ liệu khi APP_DATA_MODE=supabase.' };
@@ -20,13 +21,11 @@ export async function mutateCms(kind: CmsKind, operation: string, form: FormData
       payload = cmsPayload(kind, form);
       const file = form.get('image');
       if (file instanceof File && file.size) {
-        if (kind === 'sections' || file.size > IMAGE_LIMIT || !IMAGE_TYPES.includes(file.type)) throw new Error('Ảnh phải là JPEG, PNG hoặc WebP, tối đa 5 MB.');
-        const bytes = Buffer.from(await file.arrayBuffer());
-        const valid = (file.type === 'image/jpeg' && bytes.subarray(0,3).equals(Buffer.from([255,216,255]))) || (file.type === 'image/png' && bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10]))) || (file.type === 'image/webp' && bytes.toString('ascii',0,4)==='RIFF' && bytes.toString('ascii',8,12)==='WEBP');
-        if (!valid) throw new Error('Nội dung ảnh không khớp MIME type.');
+        if (kind === 'sections') throw new Error('Nhóm không hỗ trợ ảnh.');
+        const bytes=await sanitizeImage(file);
         const bucket = kind === 'banners' ? 'homepage-banners' : 'course-thumbnails';
-        const path = `${randomUUID()}.${file.type.split('/')[1]}`;
-        const { error } = await client.storage.from(bucket).upload(path, bytes, { contentType: file.type, upsert: false });
+        const path = `${randomUUID()}.webp`;
+        const { error } = await client.storage.from(bucket).upload(path, bytes, { contentType: 'image/webp', upsert: false });
         if (error) throw new Error('Upload thất bại. Kiểm tra bucket và quyền Storage.');
         uploaded = { bucket, path };
         payload[kind === 'banners' ? 'image_url' : 'thumbnail_url'] = client.storage.from(bucket).getPublicUrl(path).data.publicUrl;

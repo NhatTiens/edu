@@ -1,5 +1,17 @@
 # Checklist hoàn thiện EduQuiz
 
+## Security audit (latest)
+
+- [x] Audit RLS, admin authorization, runtime IDOR, session/clock/grade tampering, uploads and server/client boundaries; fixes in migration 0010 and server modules.
+- [x] Fix caller-chosen session tokens, bind renewal to the visitor, add shared unlock/request/login budgets and remove demo admin-page bypass.
+- [x] Decode/re-encode uploads, sandbox YouTube, reject credential-bearing URLs, require configured Origin and add response/cache headers.
+- [x] SECURITY.md records the security model, RLS strategy, grading trust boundary and limitations.
+- [x] Local tests: 26 unit/database tests; production build; public quiz DevTools-style checks including HTML/RSC/API/bundle/React state; CMS and Result Builder browser suites.
+- [ ] Apply migration 0010 on live Supabase and verify PostgREST/Auth/Storage plus multi-connection PostgreSQL contention. Credentials unavailable in this workspace.
+- [ ] Dev-only braces advisory has no compatible published fix (latest registry version 3.0.3); production audit has zero advisories.
+
+Current schema 0009 keeps public answer keys admin-only, including after submit; audit preserves that policy. Older public-review notes below are historical.
+
 Cập nhật: 09/10/2026, múi giờ Việt Nam. Giữ visual của frontend hiện tại; không xóa chức năng để vượt kiểm tra. Checkbox chỉ đánh dấu việc đã triển khai và kiểm tra trong lượt này. Các màn hình quản lý và luồng quiz còn là scaffold, không phải sản phẩm đã hoàn thiện.
 
 ## P0 · Nền tảng đã triển khai

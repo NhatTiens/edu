@@ -14,7 +14,7 @@ const server=spawn(process.execPath,['node_modules/next/dist/bin/next','start','
 try{
  await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Startup timeout')),20000);server.stdout.on('data',b=>{if(String(b).includes('Ready')){clearTimeout(timer);resolve();}});server.stderr.on('data',b=>process.stderr.write(b));});
  console.log('QA server ready');
- browser=await chromium.launch({headless:true,channel:'chromium'});const context=await browser.newContext();const page=await context.newPage();page.on('dialog',d=>d.accept());const captured=[];const captures=[];
+ browser=await chromium.launch({headless:true,channel:'chromium'});const context=await browser.newContext();const fixedCookie='quiz_access_'+(await import('node:crypto')).createHash('sha256').update(slug).digest('hex').slice(0,20);await context.addCookies([{name:fixedCookie,value:'f'.repeat(64),url:base}]);const page=await context.newPage();page.on('dialog',d=>d.accept());const captured=[];const captures=[];
  page.on('requestfinished',req=>{if(req.url().startsWith(base))captures.push(req.response().then(r=>r.text()).then(body=>captured.push(body)).catch(()=>{}));});
  console.log('QA browser ready');
  await page.goto(base+'/q/not-found');await page.getByRole('heading',{name:'Không tìm thấy bài kiểm tra hoặc bài làm'}).waitFor();
@@ -22,7 +22,7 @@ try{
  await db.exec(`update public.quizzes set status='published' where id='${quiz}'`);
  await page.goto(`${base}/q/${slug}`);await page.getByLabel('Họ và tên *',{exact:true}).fill('  Alice  ');await page.getByRole('button',{name:'Bắt đầu làm bài'}).click();await page.waitForURL(/\/attempt\//);const id=page.url().split('/').at(-1);
  console.log('QA attempt started');
- const cookies=await context.cookies();assert.ok(cookies.find(c=>c.name.startsWith('quiz_access_'))?.httpOnly);assert.ok(!await page.evaluate(()=>document.cookie.includes('quiz_access_')));
+ const cookies=await context.cookies();assert.notEqual(cookies.find(c=>c.name===fixedCookie)?.value,'f'.repeat(64));assert.ok(cookies.find(c=>c.name.startsWith('quiz_access_'))?.httpOnly);assert.ok(!await page.evaluate(()=>document.cookie.includes('quiz_access_')));
  const request=async(op,body)=>context.request.post(`${base}/api/quiz/${slug}/${op}`,{headers:{Origin:base},data:body});
  const before=await (await context.request.get(`${base}/api/quiz/${slug}/get?attemptId=${id}`)).json();assert.equal(before.questions.length,3);
  const rejected=await request('submit',{attemptId:id,answers:{},score:999,duration_ms:0});assert.equal(rejected.status(),400);
@@ -38,14 +38,14 @@ try{
  for(const file of await readdir('.next/static',{recursive:true})){if(file.endsWith('.js'))captured.push(await readFile('.next/static/'+file,'utf8'));}
  // Completed browser response captures supplement the explicitly awaited HTML/RSC/API/bundle checks.
  await Promise.race([Promise.all(captures),new Promise(resolve=>setTimeout(resolve,1000))]);
- for(const body of captured){assert.ok(!body.includes(secretAnswer));assert.ok(!body.includes('local-test-service'));assert.ok(!body.includes('local-test-secret-not-for-production'));}
+ const state=await page.evaluate(()=>{const seen=new WeakSet();const found=[];const forbidden=['correct_option_id','correct_boolean','accepted_answers','password_hash','participant_data','question_snapshot'];function visit(v,depth){if(depth>10||!v||typeof v!=='object'||seen.has(v))return;seen.add(v);for(const k of Object.keys(v)){if(forbidden.includes(k))found.push(k);if(!['return','_owner','stateNode','alternate'].includes(k))visit(v[k],depth+1);}}for(const el of document.querySelectorAll('*'))for(const key of Object.keys(el))if(key.startsWith('__reactProps')||key.startsWith('__reactFiber'))visit(el[key],0);return found;});assert.deepEqual(state,[]);for(const body of captured){assert.ok(!body.includes(secretAnswer));assert.ok(!body.includes('local-test-service'));assert.ok(!body.includes('local-test-secret-not-for-production'));}
  for(const key of ['correct_option_id','correct_boolean','accepted_answers','password_hash','participant_data'])assert.ok(!JSON.stringify(after).includes(key));
  await mkdir('artifacts/public-quiz',{recursive:true});await page.setViewportSize({width:375,height:950});await page.screenshot({path:'artifacts/public-quiz/attempt-375.png',fullPage:true});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
- await page.getByRole('button',{name:'Nộp bài',exact:true}).click();await page.waitForURL(/\/result\//);await page.getByText('3 / 3',{exact:true}).waitFor();await page.getByRole('link',{name:'Bảng xếp hạng'}).click();await page.getByRole('cell',{name:'Alice',exact:true}).waitFor();
+ await page.getByRole('button',{name:'Nộp bài',exact:true}).click();await page.waitForURL(/\/result\//);await page.getByText('3 / 3',{exact:true}).waitFor();await page.getByRole('link',{name:'Bảng xếp hạng'}).click();await page.getByRole('cell',{name:'Họ và tên: Alice',exact:true}).waitFor();
  const stored=(await db.query('select * from public.attempts where id=$1',[id])).rows[0];assert.equal(Number(stored.score),3);assert.equal(stored.correct_count,3);assert.ok(Math.abs(Number(stored.duration_ms)-(new Date(stored.submitted_at).getTime()-new Date(stored.started_at).getTime()))<=1);
  const duplicates=await Promise.all([request('submit',{attemptId:id,answers:{}}),request('submit',{attemptId:id,answers:{}})]);for(const res of duplicates)assert.equal(res.status(),200);assert.equal((await db.query('select * from public.answers where attempt_id=$1',[id])).rows.length,3);
  const again=await request('start',{requestId:crypto.randomUUID(),participant:{name:'ALICE'}});assert.equal((await again.json()).error,'ATTEMPT_LIMIT');
- const stranger=await browser.newContext();assert.equal((await stranger.request.get(`${base}/api/quiz/${slug}/get?attemptId=${id}`)).status(),401);
+ const stranger=await browser.newContext();const adminAttack=await stranger.request.get(base+'/admin/quizzes/'+quiz+'/participants/export',{maxRedirects:0});assert.ok([307,401].includes(adminAttack.status()));assert.equal((await stranger.request.get(`${base}/api/quiz/${slug}/get?attemptId=${id}`)).status(),401);
  // Password protected flow, including correct/incorrect password and unlock rate limit.
  const salt=randomBytes(16).toString('hex');const password='local-password-test';const passwordHash=`scrypt$${salt}$${scryptSync(password,salt,64).toString('hex')}`;await db.query('update public.quizzes set password_hash=$1 where id=$2',[passwordHash,quiz]);
  const protectedPage=await stranger.newPage();await protectedPage.goto(`${base}/q/${slug}`);await protectedPage.getByLabel('Mật khẩu bài kiểm tra',{exact:true}).fill('wrong');await protectedPage.getByRole('button',{name:'Mở khóa'}).click();await protectedPage.getByRole('alert').filter({hasText:'Mật khẩu chưa đúng.'}).waitFor();assert.ok(!protectedPage.url().includes('wrong'));
@@ -56,4 +56,5 @@ try{
  const limited=await browser.newContext();for(let i=0;i<8;i++){const r=await limited.request.post(`${base}/api/quiz/${slug}/unlock`,{headers:{Origin:base},data:{password:'wrong'}});assert.equal(r.status(),401);}const limit=await limited.request.post(`${base}/api/quiz/${slug}/unlock`,{headers:{Origin:base},data:{password:'wrong'}});assert.equal(limit.status(),429);
  console.log('PASS public quiz seed E2E: availability, no/password unlock, HttpOnly ownership, form/start/resume/submit/result/leaderboard, server grading, rate limit, attempt limit, CSRF, late/duplicate submit, response leakage checks. Local PostgreSQL WASM; Supabase cloud not tested.');
 }catch(e){console.error('QA failure',e);throw e;}finally{console.log('QA cleanup');await browser?.close();server.kill();fixture.close();await db.close();}
+
 

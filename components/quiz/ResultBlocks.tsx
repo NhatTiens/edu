@@ -23,6 +23,7 @@ export function ResultBlocks({ blocks }: { blocks: PublicResultBlock[] }) {
                 title={b.title || "Video chữa bài"}
                 loading="lazy"
                 allow="encrypted-media; picture-in-picture; fullscreen"
+                sandbox="allow-scripts allow-same-origin allow-presentation"
                 allowFullScreen
                 referrerPolicy="no-referrer"
               />
@@ -54,3 +55,4 @@ export function ResultBlocks({ blocks }: { blocks: PublicResultBlock[] }) {
     </div>
   );
 }
+

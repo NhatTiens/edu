@@ -1,3 +1,4 @@
+import sharp from 'sharp';
 // Local HTTP fixture exercises application rendering/actions, not Supabase integration.
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
@@ -46,8 +47,8 @@ try{await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new E
  await page.goto(`http://127.0.0.1:3321/admin/courses/${created.id}`);
  await page.locator('input[type=file]').setInputFiles({name:'fake.png',mimeType:'image/png',buffer:Buffer.from('not an image')});
  await page.getByRole('button',{name:'Lưu thay đổi'}).click();
- await page.getByRole('alert').filter({hasText:'Nội dung ảnh không khớp MIME type.'}).waitFor();
- const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jS1cAAAAASUVORK5CYII=','base64');
+ await page.getByRole('alert').filter({hasText:'Ảnh không hợp lệ, quá lớn hoặc không khớp MIME type.'}).waitFor();
+ const png=await sharp({create:{width:2,height:2,channels:3,background:'#fff'}}).png().toBuffer();
  await page.locator('input[type=file]').setInputFiles({name:'preview.png',mimeType:'image/png',buffer:png});
  await page.getByAltText('Xem trước ảnh').waitFor();
  await page.getByRole('button',{name:'Lưu thay đổi'}).click();

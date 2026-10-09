@@ -1,4 +1,5 @@
 import { NextRequest,NextResponse } from 'next/server';
+import { siteOrigin } from '@/lib/auth/site-origin';
 import { z } from 'zod';
 import { QuizError,errorMessage,unlock,start,writeAttempt,ownedAttempt } from '@/lib/services/public-quiz';
 const answerSchema=z.object({attemptId:z.uuid(),answers:z.record(z.uuid(),z.union([z.string().max(2000),z.boolean(),z.null()]))}).strict();
@@ -15,7 +16,7 @@ export async function handleQuiz(req:NextRequest,slug:string,op:'unlock'|'start'
  try{
  if(!/^[a-z0-9-]{1,160}$/.test(slug))throw new QuizError('NOT_FOUND',404);
  if(op==='get'){const id=req.nextUrl.searchParams.get('attemptId')??'';return NextResponse.json(await ownedAttempt(slug,id),{headers});}
- const expected=new URL(process.env.NEXT_PUBLIC_SITE_URL??req.url).origin;if(req.headers.get('origin')!==expected)throw new QuizError('ORIGIN',403);
+ const expected=siteOrigin();if(req.headers.get('origin')!==expected)throw new QuizError('ORIGIN',403);
  const body=await readBody(req);let result;
  if(op==='unlock'){const parsed=unlockSchema.safeParse(body);if(!parsed.success)throw new QuizError('WRONG_PASSWORD');result=await unlock(slug,parsed.data.password);}
  else if(op==='start'){const parsed=startSchema.safeParse(body);if(!parsed.success)throw new QuizError('INVALID_PARTICIPANT');result=await start(slug,parsed.data.participant,parsed.data.requestId);}

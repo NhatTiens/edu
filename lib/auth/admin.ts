@@ -1,7 +1,7 @@
 import 'server-only';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { hasSupabaseConfig, isDemoMode } from '@/lib/config';
+import { hasSupabaseConfig } from '@/lib/config';
 export async function getAdmin() {
   if (!hasSupabaseConfig()) return null;
   const client = await createClient();
@@ -11,6 +11,7 @@ export async function getAdmin() {
   return !membership.error && membership.data ? user : null;
 }
 export async function requireAdminPage() {
-  if (isDemoMode()) return;
+
   if (!await getAdmin()) redirect('/admin/login');
 }
+

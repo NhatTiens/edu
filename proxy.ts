@@ -1,10 +1,10 @@
 import { createServerClient, type SetAllCookies } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { hasSupabaseConfig, isDemoMode, supabaseConfig } from "@/lib/config";
+import { hasSupabaseConfig, supabaseConfig } from "@/lib/config";
 import type { Database } from "@/lib/supabase/database.types";
 
 export async function proxy(request: NextRequest) {
-  if (isDemoMode()) return NextResponse.next();
+
   const login = request.nextUrl.pathname === "/admin/login";
   if (!hasSupabaseConfig()) return login ? NextResponse.next() : NextResponse.redirect(new URL("/admin/login", request.url));
   let response = NextResponse.next({ request });
@@ -15,7 +15,7 @@ export async function proxy(request: NextRequest) {
     Object.entries(headers).forEach(([name, value]) => response.headers.set(name, value));
   };
   const { url, key } = supabaseConfig();
-  const client = createServerClient<Database>(url, key, { cookies: { getAll: () => request.cookies.getAll(), setAll } });
+  const client = createServerClient<Database>(url, key, { cookieOptions: { httpOnly: true, sameSite: 'lax', secure: process.env.NEXT_PUBLIC_SITE_URL?.startsWith('https://') ?? process.env.NODE_ENV === 'production' }, cookies: { getAll: () => request.cookies.getAll(), setAll } });
   const { data: { user } } = await client.auth.getUser();
   let isAdmin = false;
   if (user) {
@@ -37,3 +37,4 @@ export async function proxy(request: NextRequest) {
   return response;
 }
 export const config = { matcher: ["/admin/:path*"] };
+

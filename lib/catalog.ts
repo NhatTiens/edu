@@ -2,7 +2,7 @@ import type { Course } from "./types";
 import type { CourseRow } from "./supabase/database.types";
 export function safeHttpUrl(value: string | null) {
   if (!value) return undefined;
-  try { const url = new URL(value); return ["https:", "http:"].includes(url.protocol) ? url.href : undefined; }
+  try { if (/[\\\s]/.test(value)) return undefined; const url = new URL(value); return ["https:", "http:"].includes(url.protocol) && !url.username && !url.password ? url.href : undefined; }
   catch { return undefined; }
 }
 export function mapCourse(row: CourseRow): Course {
@@ -19,3 +19,4 @@ export function searchCourses(courses: Course[], query: string) {
   const needle = normalize(query.trim());
   return !needle || needle === "all" ? courses : courses.filter(c => normalize(`${c.title} ${c.category} ${c.teacherName}`).includes(needle));
 }
+
