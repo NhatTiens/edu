@@ -75,6 +75,19 @@ const fixture = createServer(async (req, res) => {
     } else if (path === "/rest/v1/rpc/admin_save_result") {
       query = "select public.admin_save_result($1) d";
       args = [p.p_document];
+    } else if (path === "/rest/v1/rpc/admin_results") {
+      query = "select public.admin_results($1,$2,$3,$4,$5,$6) d";
+      args = [
+        p.p_quiz,
+        p.p_op,
+        p.p_search ?? "",
+        p.p_page ?? 1,
+        p.p_size ?? 25,
+        p.p_attempt ?? null,
+      ];
+    } else if (path === "/rest/v1/rpc/admin_leaderboard_settings") {
+      query = "select public.admin_leaderboard_settings($1,$2,$3,$4) d";
+      args = [p.p_quiz, p.p_revision, p.p_enabled, p.p_keys];
     } else if (path === "/rest/v1/rpc/quiz_runtime") {
       if (req.headers.authorization !== "Bearer test-service") {
         res.statusCode = 401;
@@ -311,7 +324,104 @@ try {
     `update public.quizzes set status='closed',show_correct_answers=true where id='${qid}'`,
   );
   await resultPage.reload();
-  await resultPage.getByRole("heading", { name: "Chi tiết đáp án" }).waitFor();
+  assert.equal(
+    await resultPage.getByRole("heading", { name: "Chi tiết đáp án" }).count(),
+    0,
+  );
+
+  await db.query(
+    "update public.attempts set participant_data=participant_data || $1::jsonb where id=$2",
+    [
+      JSON.stringify({
+        email: "NEVER_PUBLIC_EMAIL",
+        phone: "NEVER_PUBLIC_PHONE",
+        student_id: "NEVER_PUBLIC_STUDENT",
+        facebook: "NEVER_PUBLIC_FACEBOOK",
+      }),
+      attempt.id,
+    ],
+  );
+  await mkdir("artifacts/results-data", { recursive: true });
+  for (const [route, heading] of [
+    ["participants", "Người tham gia:"],
+    ["analytics", "Phân tích:"],
+    ["leaderboard", "Xếp hạng:"],
+    [`participants/${attempt.id}`, "Chi tiết bài làm"],
+  ]) {
+    await page.goto(`${base}/admin/quizzes/${qid}/${route}`);
+    await page
+      .getByRole("heading", { level: 1 })
+      .filter({ hasText: heading })
+      .waitFor();
+    for (const width of [375, 768, 1440]) {
+      await page.setViewportSize({ width, height: 950 });
+      assert.equal(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth > innerWidth,
+        ),
+        false,
+        `overflow ${route} at ${width}`,
+      );
+      await page.screenshot({
+        path: `artifacts/results-data/${route.includes("/") ? "detail" : route}-${width}.png`,
+        fullPage: true,
+      });
+    }
+  }
+  await page.getByText("Đáp án đúng:", { exact: false }).first().waitFor();
+  await page.goto(
+    `${base}/admin/quizzes/${qid}/participants?search=missing-person`,
+  );
+  await page.getByText("Chưa có dữ liệu phù hợp.").waitFor();
+  const exported = await context.request.get(
+    `${base}/admin/quizzes/${qid}/participants/export`,
+  );
+  assert.equal(exported.status(), 200);
+  assert.ok(exported.headers()["content-type"].includes("text/csv"));
+  assert.ok((await exported.text()).includes("Preview"));
+  await resultPage.goto(`${base}/q/${slug}/leaderboard`);
+  await resultPage.getByRole("heading", { name: "Bảng xếp hạng" }).waitFor();
+  for (const secret of [
+    "NEVER_PUBLIC_EMAIL",
+    "NEVER_PUBLIC_PHONE",
+    "NEVER_PUBLIC_STUDENT",
+    "NEVER_PUBLIC_FACEBOOK",
+    "participant_data",
+  ])
+    assert.ok(!(await resultPage.content()).includes(secret));
+  for (const width of [375, 768, 1440]) {
+    await resultPage.setViewportSize({ width, height: 950 });
+    assert.equal(
+      await resultPage.evaluate(
+        () => document.documentElement.scrollWidth > innerWidth,
+      ),
+      false,
+    );
+    await resultPage.screenshot({
+      path: `artifacts/results-data/public-${width}.png`,
+      fullPage: true,
+    });
+  }
+  await page.goto(`${base}/admin/quizzes/${qid}/leaderboard`);
+  await page.getByLabel("Họ và tên", { exact: true }).uncheck();
+  await page.getByRole("button", { name: "Lưu cấu hình", exact: true }).click();
+  // Refresh remounts the settings component after the successful mutation.
+  await page.waitForFunction(
+    () =>
+      !Array.from(document.querySelectorAll("button")).some(
+        (b) => b.textContent === "Đang lưu…",
+      ),
+  );
+  await page.reload();
+  assert.equal(
+    await page.getByLabel("Họ và tên", { exact: true }).isChecked(),
+    false,
+  );
+  await resultPage.reload();
+  assert.ok(!(await resultPage.content()).includes("Preview"));
+  console.log(
+    "PASS results data: real SQL reports, detail, empty search, CSV, public allowlist revocation, responsive 375/768/1440. Local fixture.",
+  );
   console.log(
     "PASS Result Builder: five types, validation, save/reload/edit/delete/reorder, scheduled suppression, escaped text, immutable attempt after video edit, review permission and mobile/desktop. Local DB fixture only.",
   );

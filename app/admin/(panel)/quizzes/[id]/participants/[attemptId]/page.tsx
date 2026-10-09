@@ -1,1 +1,82 @@
-export default function AttemptDetail(){return <><h1 className="admin-page-title">Nguyễn Văn A</h1><div className="stat-grid"><div className="stat-card"><div className="stat-value">18/20</div><span className="small muted">Điểm</span></div><div className="stat-card"><div className="stat-value">#12</div><span className="small muted">Xếp hạng</span></div><div className="stat-card"><div className="stat-value">06:23</div><span className="small muted">Thời gian</span></div><div className="stat-card"><div className="stat-value">90%</div><span className="small muted">Tỷ lệ đúng</span></div></div><section className="admin-card" style={{marginTop:18}}><h3>Chi tiết câu trả lời</h3>{[1,2,3,4,5].map(i=><div key={i} className="row-between" style={{padding:'14px 0',borderBottom:'1px solid var(--border)'}}><div><strong>Câu {i}</strong><div className="small muted">Đáp án người dùng: {i===3?'B':'A'} · Đáp án đúng: A</div></div><span className={`badge ${i===3?'red':'green'}`}>{i===3?'0 điểm':'+1 điểm'}</span></div>)}</section></>}
+import { notFound } from "next/navigation";
+import { resultsReport } from "@/lib/repositories/results-data";
+import {
+  answerText,
+  durationText,
+  valueText,
+  type AttemptReport,
+} from "@/lib/results-data";
+import { ResultsNav } from "@/components/admin/ResultsNav";
+export default async function Page({
+  params,
+}: {
+  params: Promise<{ id: string; attemptId: string }>;
+}) {
+  const { id, attemptId } = await params;
+  const data = await resultsReport<AttemptReport>(
+    id,
+    "detail",
+    "",
+    1,
+    attemptId,
+  );
+  if (!data) notFound();
+  const a = data.attempt;
+  return (
+    <>
+      <ResultsNav id={id} />
+      <h1 className="admin-page-title">Chi tiết bài làm</h1>
+      <p>{data.title}</p>
+      <section className="admin-card stack">
+        <h2>Thông tin người tham gia</h2>
+        {Object.entries(a.participant_data).map(([key, value]) => (
+          <p key={key} style={{ overflowWrap: "anywhere" }}>
+            <strong>
+              {data.fields.find((f) => f.key === key)?.label ?? key}:
+            </strong>{" "}
+            {valueText(value)}
+          </p>
+        ))}
+        <p>
+          Trạng thái: {a.status === "submitted" ? "Đã nộp" : "Chưa nộp"} · Điểm:{" "}
+          {a.status === "submitted" ? `${a.score}/${a.max_score}` : "Chưa chấm"}{" "}
+          · Hạng: {a.rank ?? "—"} · Thời gian: {durationText(a.duration_ms)}
+        </p>
+      </section>
+      <section className="admin-card stack" style={{ marginTop: 16 }}>
+        <h2>Chi tiết câu trả lời</h2>
+        <p className="muted">
+          Nội dung và đáp án lấy từ bản đề đã lưu khi bắt đầu bài làm. Chỉ Admin
+          được truy cập.
+        </p>
+        {data.questions.map((q, i) => (
+          <article
+            key={q.id}
+            style={{
+              padding: "12px 0",
+              borderBottom: "1px solid var(--border)",
+              overflowWrap: "anywhere",
+            }}
+          >
+            <h3>
+              Câu {i + 1}: {q.content}
+            </h3>
+            <p>Người làm trả lời: {answerText(q.answer, q.type, q.options)}</p>
+            <p>
+              Đáp án đúng:{" "}
+              <strong>{answerText(q.correct, q.type, q.options)}</strong>
+            </p>
+            <p>
+              {q.is_correct === null
+                ? "Chưa chấm"
+                : q.is_correct
+                  ? "Đúng"
+                  : "Sai / bỏ trống"}{" "}
+              · Điểm nhận: {q.points_awarded ?? "—"} / {q.points}
+            </p>
+          </article>
+        ))}
+      </section>
+    </>
+  );
+}

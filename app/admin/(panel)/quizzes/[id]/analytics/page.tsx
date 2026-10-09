@@ -1,2 +1,78 @@
-import { StatCard } from "@/components/admin/StatCard";
-export default function Analytics(){return <><h1 className="admin-page-title">Phân tích bài kiểm tra</h1><div className="stat-grid"><StatCard value="235" label="Người tham gia"/><StatCard value="16.4/20" label="Điểm trung bình"/><StatCard value="07:22" label="Thời gian trung bình"/><StatCard value="84%" label="Tỉ lệ hoàn thành"/></div><div className="grid-2" style={{marginTop:18}}><section className="admin-card"><h3>Phân bố điểm</h3><div className="fake-chart">{[22,35,48,72,90,65,40].map((h,i)=><span style={{height:`${h}%`}} key={i}/>)}</div></section><section className="admin-card"><h3>Độ khó từng câu</h3><table><thead><tr><th>Câu</th><th>Tỉ lệ đúng</th></tr></thead><tbody>{[94,72,38,81,66].map((x,i)=><tr key={i}><td>Câu {i+1}</td><td><strong>{x}%</strong></td></tr>)}</tbody></table></section></div></>}
+import { notFound } from "next/navigation";
+import { resultsReport } from "@/lib/repositories/results-data";
+import { durationText, type AnalyticsReport } from "@/lib/results-data";
+import { ResultsNav } from "@/components/admin/ResultsNav";
+export default async function Page({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const data = await resultsReport<AnalyticsReport>(id, "analytics");
+  if (!data) notFound();
+  const s = data.summary;
+  return (
+    <>
+      <ResultsNav id={id} />
+      <h1 className="admin-page-title">Phân tích: {data.title}</h1>
+      <div className="stat-grid">
+        {[
+          ["Người tham gia", s.participant_count],
+          ["Tổng lượt làm", s.total_attempts],
+          ["Lượt đã hoàn thành", s.completed_attempts],
+          ["Tỷ lệ hoàn thành", `${s.completion_rate}%`],
+          [
+            "Điểm trung bình",
+            s.average_score === null ? "—" : Number(s.average_score).toFixed(2),
+          ],
+          ["Thời gian trung bình", durationText(s.average_duration_ms)],
+        ].map(([label, value]) => (
+          <div className="stat-card" key={label}>
+            <div className="stat-value">{value}</div>
+            <span>{label}</span>
+          </div>
+        ))}
+      </div>
+      <p className="muted">
+        Người tham gia được đếm theo mã định danh đã băm, không phải danh tính
+        đã xác thực. Tỷ lệ hoàn thành = lượt đã nộp / tổng lượt bắt đầu. Trung
+        bình chỉ tính lượt đã nộp; mỗi lượt làm được tính riêng.
+      </p>
+      <section className="admin-card">
+        <h2>Tỷ lệ đúng từng câu</h2>
+        <p>
+          Mẫu số là số lượt đã nộp có câu hỏi trong bản đề. Bỏ trống được tính
+          sai.
+        </p>
+        {!data.questions.length ? (
+          <p>Chưa có bài nộp để phân tích.</p>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Câu hỏi</th>
+                  <th>Đúng</th>
+                  <th>Lượt đã nộp</th>
+                  <th>Tỷ lệ đúng</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.questions.map((q, i) => (
+                  <tr key={`${q.id}-${i}`}>
+                    <td style={{ maxWidth: 600, overflowWrap: "anywhere" }}>
+                      {q.content}
+                    </td>
+                    <td>{q.correct_count}</td>
+                    <td>{q.completed_count}</td>
+                    <td>{q.correct_rate}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+    </>
+  );
+}

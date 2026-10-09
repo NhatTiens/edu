@@ -22,6 +22,7 @@ export async function runtimeDatabase(consolidated = false) {
       "0006_public_quiz_runtime",
       "0007_result_builder",
       "0008_result_builder_validation",
+      "0009_results_data",
     ])
       await db.exec(
         readFileSync(

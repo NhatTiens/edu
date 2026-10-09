@@ -68,7 +68,7 @@ Cập nhật: 09/10/2026, múi giờ Việt Nam. Giữ visual của frontend hi�
 
 ## P5 · Analytics và release; phụ thuộc P4
 
-- [ ] Số liệu dashboard, participants, correctness/question, completion rate và duration lấy từ DB; phân trang/filter/export CSV an toàn.
+- [x] Participants, attempt detail, quiz leaderboard/analytics, correctness/question, completion rate và duration lấy từ DB; search/pagination/CSV. Dashboard tổng quan còn ngoài phạm vi.
 - [ ] Bổ sung seed fixtures/test environments, kiểm thử full lifecycle admin → publish → quiz → kết quả.
 - [x] Visual QA CMS/homepage 375px, 768px, 1440px bằng Chromium; không còn overflow ngang ở các route kiểm tra.
 - [ ] Sửa overflow/keyboard navigation/focus/error messages dựa trên QA, không redesign.
@@ -116,7 +116,7 @@ Kiểm thử lượt này: typecheck, lint, tests liên quan và production buil
 - [x] Ranking và visibility flags; answer review chỉ sau owner submit + quiz closure; leaderboard chỉ có tên được admin chọn hiển thị.
 - [x] Quiz seed chạy browser E2E start→result 3/3→leaderboard. Test thêm mật khẩu, rate limit, CSRF, quota, reload, duplicate/late submit, HTML/RSC/API/bundle leakage marker.
 - [ ] Apply migration 0006 + cấu hình service key/QUIZ_SESSION_SECRET trên Supabase live; kiểm thử multi-connection PostgreSQL concurrency và PostgREST deployment thật.
-- [ ] Analytics chưa thuộc lượt này; Result Blocks CMS/rendering xem kết quả P4 bên dưới. Builder vẫn khóa sửa nội dung quiz có attempts dù runtime đã có snapshot, để bảo toàn FK/history.
+- [x] Quiz analytics đã nối DB trong migration 0009; Result Blocks CMS/rendering xem kết quả P4 bên dưới. Builder vẫn khóa sửa nội dung quiz có attempts dù runtime đã có snapshot, để bảo toàn FK/history.
 
 Giới hạn identity: khi không cấu hình identifier, attempt_limit theo signed browser cookie (có thể thay cookie/thiết bị). Identifier hiện do người dùng khai báo; xác thực người thật cần Auth/OTP. Hết hạn tự finalize khi có request tiếp theo; chưa có background sweeper. Xem README runtime để vận hành.
 
@@ -135,3 +135,18 @@ Kiểm chứng public runtime: typecheck/lint/build pass; unit/database suite 18
 - [ ] Áp dụng 0007 + 0008 trên Supabase live và kiểm thử Auth/PostgREST với thông tin kết nối thật; workspace chưa có credential.
 
 Kiểm chứng lượt Result Builder: `npm run verify` PASS (typecheck, lint, 21 tests và production build). `npm run test:result-builder` PASS với Chromium Headless Shell và PostgreSQL WASM HTTP fixture; admin/result ở 375/768/1440 không overflow ngang. Ảnh chụp hiện tại nằm trong `artifacts/result-builder/`. Đây không phải kiểm thử Supabase live.
+
+
+## Results data — tiếp tục từ main 2655758, 09/10/2026
+
+- [x] Năm route participants/detail/admin leaderboard/analytics/public leaderboard dùng dữ liệu PostgreSQL; không dùng mock analytics.
+- [x] Admin RPC với auth, ràng buộc quiz/attempt; search literal, phân trang, participant custom fields, điểm/đúng/sai/thời gian/hạng/ngày nộp.
+- [x] Chi tiết lấy câu hỏi và đáp án đúng từ snapshot, kết hợp đáp án đã lưu và điểm đã chấm. Theo yêu cầu mới, correct answer chỉ Admin xem; public result không còn review kể cả khi đóng quiz.
+- [x] Public allowlist đọc show_on_leaderboard hiện tại; bỏ chọn thu hồi trường công khai của bài cũ, không fallback dữ liệu định danh. Admin chỉnh được allowlist sau submission với optimistic concurrency.
+- [x] Ranking thống nhất score DESC, duration_ms ASC, submitted_at ASC, id; tìm kiếm không thay đổi hạng.
+- [x] Analytics: distinct participants, total/completed attempts, completion rate, submitted-only score/duration averages, correct rate per snapshot question.
+- [x] CSV authenticated, no-store, giới hạn 10.000 dòng, tôn trọng search, neutralize spreadsheet formulas.
+- [x] Typecheck/lint/23 tests/production build PASS.
+- [ ] Apply 0009 và kiểm tra live Supabase với project credentials; không có credentials trong workspace.
+
+Browser QA results data: PASS participants/detail/admin leaderboard/analytics/public leaderboard ở 375/768/1440; search empty state, CSV và thu hồi public field sau submit. Ảnh trong artifacts/results-data. Test chạy với production app + PostgreSQL WASM HTTP fixture, không phải Supabase live.

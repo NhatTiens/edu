@@ -239,10 +239,7 @@ test("result blocks are gated server-side; edits after submit preserve attempt a
     );
     result = await rpc("result", { token_hash, attempt_id: attempt });
     assert.equal(result.blocks.length, 3);
-    assert.equal(result.review.length, 3);
-    assert.equal(result.review[0].answer, null);
-    assert.equal(result.review[0].is_correct, false);
-    assert.equal(result.review[0].points_awarded, 0);
+    assert.equal(result.review, undefined);
     await db.exec(
       `update public.quizzes set show_correct_answers=false,show_score=false,show_ranking=false where id='${id}'`,
     );

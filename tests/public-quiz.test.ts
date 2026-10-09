@@ -38,6 +38,7 @@ test('runtime lifecycle: server duration, all grading types, limits, ownership, 
  ('${quiz}','submitted',now()-interval '1 minute',now(),5000,2,3,'{"display_name":"lower"}'),
  ('${quiz}','submitted',now()-interval '1 minute',now(),100,3,3,'{"display_name":"fast"}'),
  ('${quiz}','submitted',now()-interval '1 minute',now()-interval '30 seconds',100,3,3,'{"display_name":"earlier"}');`);
+ await db.exec(`update public.attempts set participant_data=jsonb_build_object('name',question_snapshot->>'display_name') where quiz_id='${quiz}' and question_snapshot ? 'display_name' and participant_data='{}'::jsonb`);
  const board=await rpc<Array<{rank:number;score:number;duration_ms:number;name:string}>>('leaderboard',{token_hash:token});for(let i=1;i<board.length;i++){assert.ok(board[i-1].score>board[i].score||(board[i-1].score===board[i].score&&board[i-1].duration_ms<=board[i].duration_ms));}assert.ok(board.findIndex(r=>r.name==='earlier')<board.findIndex(r=>r.name==='fast'));assert.ok(!JSON.stringify(board).includes('participant_data'));assert.ok(!JSON.stringify(board).includes('token_hash'));
  await db.exec(`update public.quizzes set show_score=false,show_ranking=false where id='${quiz}'`);const hidden=await rpc('result',{token_hash:token,attempt_id:id});assert.equal(hidden.score,null);assert.equal(hidden.rank,null);assert.deepEqual(await rpc('leaderboard',{token_hash:token}),[]);
  }finally{await db.close();}
@@ -53,7 +54,7 @@ test('deadline rejects late answers, case sensitivity, state checks and RLS enfo
  await db.exec(`update public.attempts set started_at=now()-interval '2 minutes',expires_at=now()-interval '1 minute' where id='${id}'`);
  await rpc('submit',{token_hash,attempt_id:id,answers:{[q1]:correctOption,[q2]:true,[q3]:'Hello'}});
  const result=await rpc('result',{token_hash,attempt_id:id});assert.equal(result.score,0);assert.equal(result.timed_out,true);assert.ok(Number(result.duration_ms)>=119000);assert.ok(!result.review);
- await db.exec(`update public.quizzes set status='closed' where id='${quiz}'`);assert.equal((await rpc('result',{token_hash,attempt_id:id})).review.length,3);
+ await db.exec(`update public.quizzes set status='closed' where id='${quiz}'`);assert.equal((await rpc('result',{token_hash,attempt_id:id})).review,undefined);
  await db.exec('set role anon');for(const t of ['published_quizzes','published_quiz_questions','published_question_options','quiz_access_sessions','quiz_rate_limits','questions','question_options','short_answer_accepted_answers','attempts','answers'])await assert.rejects(db.query(`select * from public.${t}`));await assert.rejects(rpc('inspect'));
  await db.exec('set role authenticated');await assert.rejects(rpc('inspect'));await assert.rejects(db.query('select public.quiz_finalize($1)',[id]));
  await db.exec('set role service_role');assert.equal((await rpc('inspect')).state,'closed');

@@ -2,17 +2,6 @@ import Link from "next/link";
 import { ownedAttempt, QuizError } from "@/lib/services/public-quiz";
 import { notFound, redirect } from "next/navigation";
 import { ResultBlocks } from "@/components/quiz/ResultBlocks";
-function answerLabel(
-  value: unknown,
-  type: string,
-  options: { id: string; content: string }[],
-) {
-  if (value === null || value === undefined) return "Bỏ trống";
-  if (type === "multiple_choice")
-    return options.find((o) => o.id === value)?.content ?? "Bỏ trống";
-  if (type === "true_false") return value === true ? "Đúng" : "Sai";
-  return Array.isArray(value) ? value.join(" / ") : String(value);
-}
 export default async function Page({
   params,
 }: {
@@ -73,28 +62,6 @@ export default async function Page({
           </Link>
         </div>
       </section>
-      {data.review && (
-        <section
-          className="surface stack"
-          style={{ padding: 24, marginTop: 20 }}
-        >
-          <h2>Chi tiết đáp án</h2>
-          {data.review.map((q) => (
-            <div key={q.id}>
-              <p>{q.content}</p>
-              <p>Bạn trả lời: {answerLabel(q.answer, q.type, q.options)}</p>
-              <p>
-                Đáp án:{" "}
-                <strong>{answerLabel(q.correct, q.type, q.options)}</strong>
-              </p>
-              <p>
-                {q.is_correct ? "Đúng" : "Sai / bỏ trống"}
-                {q.points_awarded != null ? ` · ${q.points_awarded} điểm` : ""}
-              </p>
-            </div>
-          ))}
-        </section>
-      )}
       {!!data.blocks?.length && (
         <section className="surface" style={{ padding: 24, marginTop: 20 }}>
           <ResultBlocks blocks={data.blocks} />

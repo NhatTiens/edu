@@ -63,6 +63,7 @@ export type ResultData = {
   }[];
 };
 export type LeaderboardRow = {
+  public_fields: {key:string;label:string;value:unknown}[];
   rank: number;
   name: string;
   score: number | null;

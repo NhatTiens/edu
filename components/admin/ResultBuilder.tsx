@@ -298,9 +298,7 @@ export function ResultBuilder({ initial }: { initial: AdminResultDocument }) {
             ))}
             <p className="small muted">
               Điểm: {doc.show_score ? "bật" : "tắt"} · Hạng:{" "}
-              {doc.show_rank ? "bật" : "tắt"} · Chi tiết đáp án:{" "}
-              {doc.show_correct_answers ? "bật (sau khi đóng quiz)" : "tắt"}.
-              Đổi các quyền này trong Cài đặt quiz.
+              {doc.show_rank ? "bật" : "tắt"}. Đáp án đúng chỉ Admin xem trong chi tiết bài làm. Đổi quyền điểm và hạng trong Cài đặt quiz.
             </p>
           </aside>
         </div>
