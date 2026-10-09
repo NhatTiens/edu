@@ -162,3 +162,14 @@ Kiểm chứng lượt Result Builder: `npm run verify` PASS (typecheck, lint, 2
 - [ ] Apply 0009 và kiểm tra live Supabase với project credentials; không có credentials trong workspace.
 
 Browser QA results data: PASS participants/detail/admin leaderboard/analytics/public leaderboard ở 375/768/1440; search empty state, CSV và thu hồi public field sau submit. Ảnh trong artifacts/results-data. Test chạy với production app + PostgreSQL WASM HTTP fixture, không phải Supabase live.
+
+
+## Security follow-up from latest upstream 4a2abea
+
+- [x] Fetched origin/main and isolated the latest checkout; kept upstream session fixation and quota fixes intact.
+- [x] Added 0011 RPC validation for missing/null children and reserved field keys; revoked legacy save entry point.
+- [x] Added nonce CSP, HTTPS HSTS, privileged public-key validation and consistent SSR cookie flags.
+- [x] Reviewed API/action/repository ID boundaries and updated SECURITY.md with deployment instructions and limitations.
+- [x] Typecheck, lint, 29 unit/database tests and production build pass; unconfigured smoke test passes.
+- [x] Public quiz DevTools-style browser suite and Result Builder/results data browser suites pass with nonce CSP at 375/768/1440; local PostgreSQL WASM fixture.
+- [ ] Apply migration 0011 on live Supabase and verify real Auth/PostgREST/Storage and multi-connection PostgreSQL contention; credentials unavailable.

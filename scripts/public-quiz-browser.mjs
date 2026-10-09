@@ -14,7 +14,7 @@ const server=spawn(process.execPath,['node_modules/next/dist/bin/next','start','
 try{
  await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Startup timeout')),20000);server.stdout.on('data',b=>{if(String(b).includes('Ready')){clearTimeout(timer);resolve();}});server.stderr.on('data',b=>process.stderr.write(b));});
  console.log('QA server ready');
- browser=await chromium.launch({headless:true,channel:'chromium'});const context=await browser.newContext();const fixedCookie='quiz_access_'+(await import('node:crypto')).createHash('sha256').update(slug).digest('hex').slice(0,20);await context.addCookies([{name:fixedCookie,value:'f'.repeat(64),url:base}]);const page=await context.newPage();page.on('dialog',d=>d.accept());const captured=[];const captures=[];
+ browser=await chromium.launch({headless:true,...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH?{executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH}:{channel:'chromium'})});const context=await browser.newContext();const fixedCookie='quiz_access_'+(await import('node:crypto')).createHash('sha256').update(slug).digest('hex').slice(0,20);await context.addCookies([{name:fixedCookie,value:'f'.repeat(64),url:base}]);const page=await context.newPage();page.on('dialog',d=>d.accept());const captured=[];const captures=[];
  page.on('requestfinished',req=>{if(req.url().startsWith(base))captures.push(req.response().then(r=>r.text()).then(body=>captured.push(body)).catch(()=>{}));});
  console.log('QA browser ready');
  await page.goto(base+'/q/not-found');await page.getByRole('heading',{name:'Không tìm thấy bài kiểm tra hoặc bài làm'}).waitFor();
@@ -25,7 +25,7 @@ try{
  const cookies=await context.cookies();assert.notEqual(cookies.find(c=>c.name===fixedCookie)?.value,'f'.repeat(64));assert.ok(cookies.find(c=>c.name.startsWith('quiz_access_'))?.httpOnly);assert.ok(!await page.evaluate(()=>document.cookie.includes('quiz_access_')));
  const request=async(op,body)=>context.request.post(`${base}/api/quiz/${slug}/${op}`,{headers:{Origin:base},data:body});
  const before=await (await context.request.get(`${base}/api/quiz/${slug}/get?attemptId=${id}`)).json();assert.equal(before.questions.length,3);
- const rejected=await request('submit',{attemptId:id,answers:{},score:999,duration_ms:0});assert.equal(rejected.status(),400);
+ const rejected=await request('submit',{attemptId:id,answers:{},score:999,duration_ms:0,started_at:'2099-01-01',submitted_at:'2099-01-01'});assert.equal(rejected.status(),400);
  const csrf=await context.request.post(`${base}/api/quiz/${slug}/submit`,{data:{attemptId:id,answers:{}}});assert.equal(csrf.status(),403);
  await page.getByLabel('Đúng với mọi x ∈ R',{exact:true}).check();await page.getByText('Đã lưu đáp án.',{exact:true}).waitFor();
  console.log('QA first answer saved');
@@ -33,6 +33,9 @@ try{
  const after=await (await context.request.get(`${base}/api/quiz/${slug}/get?attemptId=${id}`)).json();assert.equal(after.started_at,before.started_at);assert.equal(after.expires_at,before.expires_at);
  await page.getByRole('button',{name:'Câu tiếp',exact:true}).click();await page.getByLabel('Đúng',{exact:true}).check();await page.getByRole('button',{name:'Câu tiếp',exact:true}).click();await page.getByLabel('Câu trả lời',{exact:true}).fill(' 4.0 ');
  await page.getByText('Đã lưu đáp án.',{exact:true}).waitFor();
+ const raw=await context.request.get(`${base}/q/${slug}/attempt/${id}`);assert.equal(raw.status(),200);captured.push(await raw.text());
+ const csp=raw.headers()['content-security-policy'];assert.ok(csp.includes("'strict-dynamic'"));assert.ok(!csp.includes("'unsafe-eval'"));
+ const raw2=await context.request.get(`${base}/q/${slug}/attempt/${id}`);assert.notEqual(csp,raw2.headers()['content-security-policy']);
  captured.push(await page.content());captured.push(JSON.stringify(before),JSON.stringify(after));
  const rsc=await context.request.get(`${base}/q/${slug}/attempt/${id}`,{headers:{RSC:'1'}});assert.equal(rsc.status(),200);captured.push(await rsc.text());
  for(const file of await readdir('.next/static',{recursive:true})){if(file.endsWith('.js'))captured.push(await readFile('.next/static/'+file,'utf8'));}
@@ -51,6 +54,8 @@ try{
  const protectedPage=await stranger.newPage();await protectedPage.goto(`${base}/q/${slug}`);await protectedPage.getByLabel('Mật khẩu bài kiểm tra',{exact:true}).fill('wrong');await protectedPage.getByRole('button',{name:'Mở khóa'}).click();await protectedPage.getByRole('alert').filter({hasText:'Mật khẩu chưa đúng.'}).waitFor();assert.ok(!protectedPage.url().includes('wrong'));
  await protectedPage.getByLabel('Mật khẩu bài kiểm tra',{exact:true}).fill(password);await protectedPage.getByRole('button',{name:'Mở khóa'}).click();await protectedPage.getByLabel('Họ và tên *',{exact:true}).waitFor();assert.ok(!protectedPage.url().includes(password));assert.ok(!(await protectedPage.content()).includes(passwordHash));
  await protectedPage.getByLabel('Họ và tên *',{exact:true}).fill('Bob');await protectedPage.getByRole('button',{name:'Bắt đầu làm bài'}).click();await protectedPage.waitForURL(/\/attempt\//);const bobId=protectedPage.url().split('/').at(-1);
+ for(const op of ['save','submit']){const r=await stranger.request.post(`${base}/api/quiz/${slug}/${op}`,{headers:{Origin:base},data:{attemptId:id,answers:{}}});assert.equal(r.status(),404);}
+ assert.equal((await stranger.request.get(`${base}/api/quiz/${slug}/get?attemptId=${id}`)).status(),404);
  await db.query("update public.attempts set started_at=now()-interval '2 minutes',expires_at=now()-interval '1 minute' where id=$1",[bobId]);
  const late=await stranger.request.post(`${base}/api/quiz/${slug}/submit`,{headers:{Origin:base},data:{attemptId:bobId,answers:{'20000000-0000-4000-8000-000000000203':'4'}}});assert.equal(late.status(),200);assert.equal(Number((await db.query('select score from public.attempts where id=$1',[bobId])).rows[0].score),0);
  const limited=await browser.newContext();for(let i=0;i<8;i++){const r=await limited.request.post(`${base}/api/quiz/${slug}/unlock`,{headers:{Origin:base},data:{password:'wrong'}});assert.equal(r.status(),401);}const limit=await limited.request.post(`${base}/api/quiz/${slug}/unlock`,{headers:{Origin:base},data:{password:'wrong'}});assert.equal(limit.status(),429);

@@ -6,6 +6,7 @@ export const fieldSchema = z.object({
  id:z.uuid(), label:text, key:z.string().regex(/^[a-z][a-z0-9_]{0,63}$/,'Key gồm chữ thường, số, gạch dưới; bắt đầu bằng chữ.'), type:z.enum(fieldTypes), placeholder:z.string().max(500), required:z.boolean(), options,
  sort_order:z.number().int().min(0), is_identifier:z.boolean(), show_on_leaderboard:z.boolean()
 }).superRefine((f,ctx)=>{
+ if(['constructor','prototype','__proto__'].includes(f.key))ctx.addIssue({code:'custom',path:['key'],message:'Key này được hệ thống dành riêng.'});
  if(['select','radio','checkbox'].includes(f.type) && !f.options.length)ctx.addIssue({code:'custom',path:['options'],message:'Nhập ít nhất một lựa chọn.'});
  if(new Set(f.options).size!==f.options.length)ctx.addIssue({code:'custom',path:['options'],message:'Lựa chọn bị trùng.'});
  if(f.is_identifier&&(!f.required||!['text','email','number'].includes(f.type)))ctx.addIssue({code:'custom',path:['is_identifier'],message:'Định danh phải bắt buộc và có loại text, email hoặc number.'});

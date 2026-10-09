@@ -1,16 +1,14 @@
-import type { NextConfig } from 'next';
+import type { NextConfig } from "next";
+
+import { assertPublicKey, configuredOrigin } from "./lib/security/config";
+assertPublicKey(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+assertPublicKey(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
+if (process.env.NEXT_PUBLIC_SITE_URL)
+  configuredOrigin(process.env.NEXT_PUBLIC_SITE_URL);
 const nextConfig: NextConfig = {
- experimental:{serverActions:{bodySizeLimit:'6mb'}},
- async headers(){return [
- {source:'/(.*)',headers:[
- {key:'X-Content-Type-Options',value:'nosniff'},
- {key:'X-Frame-Options',value:'DENY'},
- {key:'Referrer-Policy',value:'no-referrer'},
- {key:'Permissions-Policy',value:'camera=(), microphone=(), geolocation=()'},
- {key:'Content-Security-Policy',value:"object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; frame-src https://www.youtube-nocookie.com"}
- ]},
- {source:'/admin/:path*',headers:[{key:'Cache-Control',value:'private, no-store'}]},
- {source:'/q/:path*',headers:[{key:'Cache-Control',value:'private, no-store'}]}
- ];}
+  poweredByHeader: false,
+  productionBrowserSourceMaps: false,
+  experimental: { serverActions: { bodySizeLimit: "6mb" } },
 };
+
 export default nextConfig;

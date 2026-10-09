@@ -1,6 +1,6 @@
 # Security model and audit
 
-Audit scope: the current application and migrations through `0010_security_audit.sql`. Local tests do not prove that an external Supabase project has applied these policies.
+Audit scope: the current application and migrations through `0011_security_followup.sql`, reviewed on top of upstream `4a2abea`. Local tests do not prove that an external Supabase project has applied these policies.
 
 ## Security model
 
@@ -8,7 +8,7 @@ Participants are untrusted: assume DevTools can edit clocks, component state, HT
 
 Admin middleware/layout requires verified Supabase Auth and membership, including demo mode. Every mutation/repository checks again; admin SQL RPCs also call is_admin(). Server actions use Next's Origin checks. Participant APIs use strict bounded JSON and exact configured Origin. Public RPC operations are fixed server code, never selected by caller-controlled operation names.
 
-The service key and QUIZ_SESSION_SECRET stay in server-only modules. Do not put them in NEXT_PUBLIC variables. Admin document endpoints legitimately return answer keys only to administrators. No participant component receives those documents.
+The service key and QUIZ_SESSION_SECRET stay in server-only modules. Do not put them in NEXT_PUBLIC variables. Build/start configuration rejects sb_secret_ keys and privileged service-role JWTs in either public key variable; server client configuration repeats that check. This guard cannot retract a secret previously published: rotate any previously exposed key. Admin document endpoints legitimately return answer keys only to administrators. No participant component receives those documents.
 
 ## RLS strategy
 
@@ -32,7 +32,7 @@ Current migration 0009 removes public review entirely: answer keys/details are a
 
 Quiz passwords use salted scrypt (128-bit random salt, 64-byte key), strict hash format validation and timingSafeEqual. Plaintext is POST-only, not persisted or logged. Supabase Auth handles admin passwords.
 
-Unlock generates a random 256-bit opaque HttpOnly cookie; only its SHA-256 hash is stored. Unknown caller-chosen tokens are replaced. Renewal reuses a token only when its existing session belongs to the same signed visitor and quiz. SQL also prevents cross-visitor/quiz rebinding. HTTPS uses Secure, SameSite=Strict and __Host- cookies without Domain. HTTP is accepted only for loopback development. Origin configuration is mandatory; request Host is not a fallback trust anchor. Admin SSR auth cookies are HttpOnly.
+Unlock generates a random 256-bit opaque HttpOnly cookie; only its SHA-256 hash is stored. Unknown caller-chosen tokens are replaced. Renewal reuses a token only when its existing session belongs to the same signed visitor and quiz. SQL also prevents cross-visitor/quiz rebinding. HTTPS uses Secure, SameSite=Strict and __Host- cookies without Domain. HTTP is accepted only for loopback development. Origin configuration is mandatory; request Host is not a fallback trust anchor. Admin SSR auth cookies enforce HttpOnly, SameSite=Lax, Path=/ and Secure for HTTPS at creation and refresh. Auth failures in the proxy fail closed while retaining response security headers.
 
 Unlock authorization lasts one hour, owned attempt access 30 days. Visitor cookies are HMAC-signed. Identity digests are keyed HMACs after Unicode NFKC/case/whitespace/numeric normalization. Keep the secret random and stable.
 
@@ -42,7 +42,7 @@ Shared PostgreSQL budgets: 8 unlocks/15 minutes per visitor+quiz, 60/15 minutes 
 
 Stored text is rendered by React, never dangerouslySetInnerHTML. YouTube URLs require exact supported host/path and 11-character video ID, and become youtube-nocookie HTTPS embeds. Iframes are sandboxed. External HTTP(S) links reject credentials, whitespace and backslashes; new tabs use noopener/noreferrer. Redirect destinations are fixed internal paths. No server URL-fetch proxy was introduced.
 
-Responses include nosniff, no-referrer, DENY framing, disabled camera/microphone/geolocation and object/base/form/frame CSP restrictions. This CSP does not yet implement nonce-based script-src; safe rendering remains the primary XSS boundary. Admin/quiz pages and APIs are private/no-store.
+Responses include nosniff, no-referrer, DENY framing, disabled camera/microphone/geolocation and object/base/form/frame CSP restrictions. The proxy now generates a fresh nonce for every request, forwards it to Next.js rendering and returns a script-src policy with strict-dynamic. Production excludes unsafe-eval and inline scripts without a valid nonce. Inline styles remain allowed for the existing UI. connect-src is same-origin: Supabase requests run on the server. HSTS is returned for configured HTTPS origins. Responses are private/no-store to prevent caching a nonce or participant response across requests. Admin/quiz pages and APIs are private/no-store.
 
 ## Fixes and evidence
 
@@ -60,3 +60,32 @@ Commands: npm run verify; npm run test:public-quiz; npm run test:result-builder;
 - All admins are trusted site-wide. A compromised admin/service key/database owner can read answers and PII. Configure MFA, disable unnecessary signup, protect deployment secrets, backups and logs.
 - Old images, sessions and participant records require an operational retention policy/job. Do not log request bodies, tokens, passwords, service keys or participant payloads.
 - Production npm audit reports zero advisories. Full audit has five high-severity chain entries rooted in dev-only braces 3.0.3 (GHSA-vfj7-8cjw-p6xm); the registry has no newer braces release. Do not process untrusted glob patterns with the lint toolchain. The suggested cross-major lint-config downgrade is not a compatible fix.
+
+
+## Follow-up implementation on upstream 4a2abea
+
+The latest upstream already contains migration 0010, chosen-token fixation protection, visitor-bound renewal, shared unlock/login/runtime quotas and decoded image uploads. These changes are preserved. Migration 0011 is additive; do not replace or rerun 0010 on an existing database.
+
+A malformed direct Admin RPC could previously supply missing/null fields or questions: SQL comparisons against NULL did not reject the document before replacing children. The new wrapper validates object/array and child field types before the original locked save transaction. It also rejects reserved participant keys; the old save function is no longer executable by client roles. Tests verify invalid documents leave the existing quiz unchanged. This is an authenticated Admin integrity issue, not a participant authorization bypass.
+
+| API or action family | ID and authorization boundary |
+| --- | --- |
+| Quiz unlock/start | Fixed server operations; validated slug/request UUID; visitor, revision and identity derived/checked on server; start holds the quiz lock during quota and insertion |
+| Quiz get/save/submit and attempt/result pages | UUID validation plus quiz, attempt and access-session match in SQL; server grading and timestamps; no client grade/time fields accepted by HTTP schema |
+| Public leaderboard | Quiz session, current show_ranking and field allowlist; no fallback private participant identity |
+| Quiz/result/leaderboard Admin actions | cmsClient checks verified Admin; SQL RPC checks is_admin, quiz/block ownership and revision; current Admin model is site-wide |
+| Participants/detail/analytics/CSV | Admin at server and RPC; detail matches quiz_id and attempt_id; bounded search/page/export; no direct public report RPC |
+| CMS course/section/banner actions | Verified Admin and RLS; table/operation allowlists, row ID and updated_at, section FK; server-generated image paths |
+| Login/logout | Fixed internal redirects; Supabase Auth, active membership and durable login budget; no public registration action |
+
+All API handlers, server actions and repositories in the current checkout were reviewed for caller-provided IDs and server/client imports. There is no user-selected SQL operation or service RPC passthrough endpoint. Correct answers in Admin components are intentional and reachable only after authorization; participant components receive allowlisted DTOs. External URLs are not fetched by the server, so these links do not introduce an SSRF proxy.
+
+## Follow-up validation and deployment
+
+Run npm run verify and npm run test:smoke. Run npm run test:public-quiz and npm run test:result-builder against the production build. The public browser suite now explicitly fetches raw page source in addition to hydrated HTML, RSC, network/API responses, compiled browser scripts and React state. It checks a private answer marker/service-secret markers, forged timestamps and scores, foreign-session get/save/submit, nonce rotation, duplicate submissions and expired answers. SQL tests exercise anon/authenticated grants, forged metadata, suspended Admins and missing/null builder payloads. Browser launch supports PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH for a locally installed Chromium.
+
+For a database already at 0010, apply only supabase/migrations/0011_security_followup.sql before serving the updated application. If it is still at 0009, run 0010_security_audit.sql and then 0011_security_followup.sql. Do not run schema.sql over an existing database; schema.sql is the fresh-install alternative to the migration chain. This audit does not run any migration against a live Supabase project.
+
+References for the implemented boundaries: [Next.js CSP and nonce guidance](https://nextjs.org/docs/app/guides/content-security-policy), [Supabase RLS](https://supabase.com/docs/guides/database/postgres/row-level-security) and [Supabase API keys](https://supabase.com/docs/guides/getting-started/api-keys). Repository tests remain the evidence for this project's behavior; documentation is not evidence of live deployment configuration.
+
+Verification result for this follow-up: typecheck, lint, 29 tests, production build, unconfigured smoke, public quiz browser suite and Result Builder/results data browser suite PASS. Browser checks ran with Chromium 133 using the executable override against the production app and local PostgreSQL WASM fixture. Responsive reports/results passed at 375, 768 and 1440 px. Production npm audit reported 0 advisories; full audit retained the 5 dev-only chain entries described above, and the registry still reported braces 3.0.3 as latest. These are local checks, not live Supabase or multi-connection PostgreSQL verification.

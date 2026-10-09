@@ -24,6 +24,7 @@ export async function runtimeDatabase(consolidated = false) {
       "0008_result_builder_validation",
       "0009_results_data",
       "0010_security_audit",
+      "0011_security_followup",
     ])
       await db.exec(
         readFileSync(
