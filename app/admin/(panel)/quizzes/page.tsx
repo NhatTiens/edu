@@ -1,0 +1,3 @@
+import Link from 'next/link';
+import { listAdminQuizzes } from '@/lib/repositories/admin-quiz';
+export default async function Page(){const quizzes=await listAdminQuizzes();return <><div className="row-between cms-heading"><h1 className="admin-page-title">Bài kiểm tra</h1><Link className="btn btn-primary" href="/admin/quizzes/new">+ Tạo bài kiểm tra</Link></div><div className="admin-card table-wrap">{!quizzes.length?<p>Chưa có bài kiểm tra.</p>:<table><thead><tr><th>Tên</th><th>Slug</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody>{quizzes.map(q=><tr key={q.id}><td>{q.title}</td><td>{q.slug}</td><td>{q.status}</td><td><Link className="btn btn-soft" href={`/admin/quizzes/${q.id}`}>Sửa</Link></td></tr>)}</tbody></table>}</div></>}
