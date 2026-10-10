@@ -1,0 +1,537 @@
+{
+  "status": "PASS",
+  "baseCommit": "d4ccb04",
+  "viewports": [
+    {
+      "width": 375,
+      "height": 812
+    },
+    {
+      "width": 768,
+      "height": 1024
+    },
+    {
+      "width": 1440,
+      "height": 900
+    }
+  ],
+  "screens": [
+    {
+      "viewport": {
+        "width": 375,
+        "height": 812
+      },
+      "screen": "login",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 375,
+        "height": 812
+      },
+      "screen": "dashboard",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 375,
+        "height": 812
+      },
+      "screen": "banner-edit",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 375,
+        "height": 812
+      },
+      "screen": "course-form",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 375,
+        "height": 812
+      },
+      "screen": "homepage",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 375,
+        "height": 812
+      },
+      "screen": "search",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 375,
+        "height": 812
+      },
+      "screen": "fields",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 375,
+        "height": 812
+      },
+      "screen": "questions",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 375,
+        "height": 812
+      },
+      "screen": "youtube-builder",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 375,
+        "height": 812
+      },
+      "screen": "before-open",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 375,
+        "height": 812
+      },
+      "screen": "participant-info",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 375,
+        "height": 812
+      },
+      "screen": "attempt",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 375,
+        "height": 812
+      },
+      "screen": "result",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 375,
+        "height": 812
+      },
+      "screen": "public-leaderboard",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 375,
+        "height": 812
+      },
+      "screen": "participant-detail",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 375,
+        "height": 812
+      },
+      "screen": "analytics",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 375,
+        "height": 812
+      },
+      "screen": "admin-leaderboard",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 375,
+        "height": 812
+      },
+      "screen": "site-settings",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 375,
+        "height": 812
+      },
+      "screen": "quiz-404",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "screen": "login",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "screen": "dashboard",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "screen": "banner-edit",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "screen": "course-form",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "screen": "homepage",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "screen": "search",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "screen": "fields",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "screen": "questions",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "screen": "youtube-builder",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "screen": "before-open",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "screen": "participant-info",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "screen": "attempt",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "screen": "result",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "screen": "public-leaderboard",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "screen": "participant-detail",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "screen": "analytics",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "screen": "admin-leaderboard",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "screen": "site-settings",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "screen": "quiz-404",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "screen": "login",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "screen": "dashboard",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "screen": "banner-edit",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "screen": "course-form",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "screen": "homepage",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "screen": "search",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "screen": "fields",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "screen": "questions",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "screen": "youtube-builder",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "screen": "before-open",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "screen": "participant-info",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "screen": "attempt",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "screen": "result",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "screen": "public-leaderboard",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "screen": "participant-detail",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "screen": "analytics",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "screen": "admin-leaderboard",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "screen": "site-settings",
+      "overflow": false,
+      "labels": true
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "screen": "quiz-404",
+      "overflow": false,
+      "labels": true
+    }
+  ],
+  "limitations": [
+    "Local Auth/Storage emulators and PostgreSQL WASM; not live Supabase",
+    "Real multi-connection PostgreSQL contention not tested"
+  ]
+}

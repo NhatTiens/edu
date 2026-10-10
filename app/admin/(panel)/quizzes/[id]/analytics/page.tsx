@@ -47,7 +47,7 @@ export default async function Page({
         {!data.questions.length ? (
           <p>Chưa có bài nộp để phân tích.</p>
         ) : (
-          <div className="table-wrap">
+          <div className="table-wrap" tabIndex={0} role="region" aria-label="Bảng dữ liệu, cuộn ngang để xem thêm">
             <table>
               <thead>
                 <tr>

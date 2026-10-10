@@ -39,7 +39,7 @@ export function ParticipantsTable({
       {!report.rows.length ? (
         <p>Chưa có dữ liệu phù hợp.</p>
       ) : (
-        <div className="table-wrap">
+        <div className="table-wrap" tabIndex={0} role="region" aria-label="Bảng dữ liệu, cuộn ngang để xem thêm">
           <table>
             <thead>
               <tr>

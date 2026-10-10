@@ -44,7 +44,7 @@ export type Database = {
       published_quiz_questions: View<PublishedQuestionRow>;
       published_question_options: View<PublishedOptionRow>;
     };
-    Functions: { admin_results:{Args:{p_quiz:string;p_op:string;p_search?:string;p_page?:number;p_size?:number;p_attempt?:string};Returns:string}; admin_leaderboard_settings:{Args:{p_quiz:string;p_revision:string;p_enabled:boolean;p_keys:string[]};Returns:undefined}; admin_result_document:{Args:{p_id:string};Returns:string}; admin_save_result:{Args:{p_document:string};Returns:number}; quiz_runtime: {Args:{p_op:string;p_payload:string};Returns:string}; is_admin: { Args: Record<string, never>; Returns: boolean }; admin_quiz_document: { Args: {p_id:string}; Returns:string }; admin_save_quiz: {Args:{p_document:string;p_password_hash:string|null;p_remove_password:boolean};Returns:string} };
+    Functions: { admin_dashboard:{Args:Record<string,never>;Returns:string}; admin_site_presentation:{Args:{p_value?:string;p_revision?:string};Returns:string}; admin_results:{Args:{p_quiz:string;p_op:string;p_search?:string;p_page?:number;p_size?:number;p_attempt?:string};Returns:string}; admin_leaderboard_settings:{Args:{p_quiz:string;p_revision:string;p_enabled:boolean;p_keys:string[]};Returns:undefined}; admin_result_document:{Args:{p_id:string};Returns:string}; admin_save_result:{Args:{p_document:string};Returns:number}; quiz_runtime: {Args:{p_op:string;p_payload:string};Returns:string}; is_admin: { Args: Record<string, never>; Returns: boolean }; admin_quiz_document: { Args: {p_id:string}; Returns:string }; admin_save_quiz: {Args:{p_document:string;p_password_hash:string|null;p_remove_password:boolean};Returns:string} };
     Enums: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
   };

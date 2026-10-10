@@ -1,13 +1,15 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { getSitePresentation } from "@/lib/repositories/site-settings";
+import { defaultPresentation } from "@/lib/site-presentation";
 import { isDemoMode } from "@/lib/config";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
-  title: "Học Tập Online",
-  description: "Khóa học và kiểm tra trực tuyến",
-};
+export async function generateMetadata():Promise<Metadata>{
+ const site=await getSitePresentation().catch(()=>defaultPresentation);
+ return {title:site.title,description:site.description||undefined,openGraph:{title:site.title,description:site.description||undefined,...(site.social_image?{images:[site.social_image]}:{})}};
+}
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (

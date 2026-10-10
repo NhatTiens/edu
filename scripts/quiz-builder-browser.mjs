@@ -1,15 +1,12 @@
 // Browser + real PostgreSQL WASM through a local Supabase HTTP fixture; no production credentials.
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
-import { readFileSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import assert from 'node:assert/strict';
-import { PGlite } from '@electric-sql/pglite';
+import { runtimeDatabase } from '../tests/helpers/runtime-db.ts';
 import { chromium } from '@playwright/test';
-const db=new PGlite();const id=randomUUID();const now=new Date().toISOString();
-await db.exec(`create role anon;create role authenticated;create schema auth;create table auth.users(id uuid primary key);create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;grant usage on schema public,auth to anon,authenticated;create schema storage;create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);create table storage.objects(id uuid default gen_random_uuid(),bucket_id text);alter table storage.objects enable row level security;`);
-for(const name of ['0001_initial','0002_security_foundation','0003_production_foundation','0004_homepage_cms','0005_quiz_builder'])await db.exec(readFileSync(`supabase/migrations/${name}.sql`,'utf8').replaceAll('create extension if not exists pgcrypto;',''));
+const db=await runtimeDatabase();const id=randomUUID();const now=new Date().toISOString();
 await db.exec(`insert into auth.users values('${id}');insert into public.profiles(id) values('${id}');insert into public.admins(user_id) values('${id}');set request.jwt.claim.sub='${id}';`);
 const user={id,email:'qa@example.com',aud:'authenticated',role:'authenticated',app_metadata:{provider:'email'},user_metadata:{},created_at:now};
 const fixture=createServer(async(req,res)=>{res.setHeader('Content-Type','application/json');try{let body='';for await(const chunk of req)body+=chunk;const path=new URL(req.url,'http://127.0.0.1:3330').pathname;
@@ -19,10 +16,10 @@ const fixture=createServer(async(req,res)=>{res.setHeader('Content-Type','applic
  if(path==='/rest/v1/quizzes'){const r=await db.query('select id,title,slug,status,updated_at from public.quizzes');return res.end(JSON.stringify(r.rows));}res.statusCode=404;res.end('{}');
  }catch(e){res.statusCode=400;res.end(JSON.stringify({message:e.message,code:e.code}));}});
 await new Promise(r=>fixture.listen(3330,'127.0.0.1',r));
-const server=spawn(process.execPath,['node_modules/next/dist/bin/next','start','--hostname','127.0.0.1','--port','3331'],{env:{...process.env,APP_DATA_MODE:'supabase',NEXT_PUBLIC_SUPABASE_URL:'http://127.0.0.1:3330',NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:'test-public-key'},stdio:['ignore','pipe','pipe']});let browser;
+const server=spawn(process.execPath,['node_modules/next/dist/bin/next','start','--hostname','127.0.0.1','--port','3331'],{env:{...process.env,APP_DATA_MODE:'supabase',NEXT_PUBLIC_SITE_URL:'http://127.0.0.1:3331',NEXT_PUBLIC_SUPABASE_URL:'http://127.0.0.1:3330',NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:'test-public-key'},stdio:['ignore','pipe','pipe']});let browser;
 try{
  await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Startup timeout')),20000);server.stdout.on('data',b=>{if(String(b).includes('Ready')){clearTimeout(timer);resolve();}});server.stderr.on('data',b=>process.stderr.write(b));});
- browser=await chromium.launch({headless:true,channel:'chromium'});const context=await browser.newContext();const exp=Math.floor(Date.now()/1000)+3600;const jwt=[Buffer.from(JSON.stringify({alg:'HS256',typ:'JWT'})).toString('base64url'),Buffer.from(JSON.stringify({sub:id,exp,role:'authenticated'})).toString('base64url'),'fixture'].join('.');
+ browser=await chromium.launch({headless:true,...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH?{executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH}:{channel:'chromium'})});const context=await browser.newContext();const exp=Math.floor(Date.now()/1000)+3600;const jwt=[Buffer.from(JSON.stringify({alg:'HS256',typ:'JWT'})).toString('base64url'),Buffer.from(JSON.stringify({sub:id,exp,role:'authenticated'})).toString('base64url'),'fixture'].join('.');
  await context.addCookies([{name:'sb-127-auth-token',value:'base64-'+Buffer.from(JSON.stringify({access_token:jwt,refresh_token:'fixture',expires_at:exp,expires_in:3600,token_type:'bearer',user})).toString('base64url'),url:'http://127.0.0.1:3331'}]);
  const page=await context.newPage();await page.goto('http://127.0.0.1:3331/admin/quizzes/new');
  await page.getByLabel('Tên bài kiểm tra',{exact:true}).fill('Browser quiz');await page.getByLabel('Slug',{exact:true}).fill('browser-quiz');await page.getByLabel('Mật khẩu tùy chọn',{exact:true}).fill('not-a-production-password');
@@ -38,8 +35,8 @@ try{
  await page.getByRole('button',{name:'Preview',exact:true}).click();await page.getByRole('heading',{name:'Xem trước: Short answer?'}).waitFor();
  await page.getByRole('button',{name:'Lưu quiz',exact:true}).click();await page.waitForURL(/\/admin\/quizzes\/[a-f0-9-]{36}$/);const quizId=page.url().split('/').at(-1);
  const read=async()=>JSON.parse((await db.query('select public.admin_quiz_document($1) as d',[quizId])).rows[0].d);const doc=await read();assert.equal(doc.questions.length,3);assert.equal(doc.fields.length,8);assert.equal(doc.questions[1].correct_boolean,false);const secret=(await db.query('select password_hash from public.quizzes where id=$1',[quizId])).rows[0].password_hash;assert.match(secret,/^scrypt\$/);assert.ok(!JSON.stringify(doc).includes(secret));
- await page.goto(`http://127.0.0.1:3331/admin/quizzes/${quizId}/questions`);await page.getByRole('button',{name:/3\. Short answer/}).click();await page.getByRole('button',{name:'↑',exact:true}).click();await page.getByLabel('Điểm',{exact:true}).fill('2.5');await page.getByRole('button',{name:'Lưu quiz',exact:true}).click();await page.getByRole('status').filter({hasText:'Đã lưu quiz.'}).waitFor();assert.equal((await read()).questions[1].points,2.5);
- await mkdir('artifacts/quiz-builder',{recursive:true});for(const width of [375,768,1440]){await page.setViewportSize({width,height:950});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);await page.screenshot({path:`artifacts/quiz-builder/questions-${width}.png`,fullPage:true});}
+ await page.goto(`http://127.0.0.1:3331/admin/quizzes/${quizId}/questions`);await page.getByRole('button',{name:/3\. Short answer/}).click();await page.getByRole('button',{name:'Đưa câu hỏi lên',exact:true}).click();await page.getByLabel('Điểm',{exact:true}).fill('2.5');await page.getByRole('button',{name:'Lưu quiz',exact:true}).click();await page.getByRole('status').filter({hasText:'Đã lưu quiz.'}).waitFor();assert.equal((await read()).questions[1].points,2.5);
+ await mkdir('artifacts/quiz-builder',{recursive:true});for(const [width,height] of [[375,812],[768,1024],[1440,900]]){await page.setViewportSize({width,height});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);await page.screenshot({path:`artifacts/quiz-builder/questions-${width}.png`,fullPage:true});}
  page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'Xóa',exact:true}).click();await page.getByRole('button',{name:'Lưu quiz',exact:true}).click();await page.getByText('Đã đồng bộ',{exact:true}).waitFor();assert.equal((await read()).questions.length,2);
  console.log('PASS Quiz Builder browser + PGlite: 8 field types, 3 questions, password hash, save/reload/reorder/points/delete/preview. Supabase live not tested.');
 }finally{await browser?.close();server.kill();fixture.close();await db.close();}

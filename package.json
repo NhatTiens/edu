@@ -12,9 +12,11 @@
     "verify": "npm run typecheck && npm run lint && npm test && npm run build",
     "test:smoke": "node scripts/smoke.mjs",
     "test:cms-browser": "node scripts/cms-browser.mjs",
-    "test:quiz-builder": "node scripts/quiz-builder-browser.mjs",
+    "test:quiz-builder": "node --import tsx scripts/quiz-builder-browser.mjs",
     "test:public-quiz": "node --import tsx scripts/public-quiz-browser.mjs",
-    "test:result-builder": "node --import tsx scripts/result-builder-browser.mjs"
+    "test:result-builder": "node --import tsx scripts/result-builder-browser.mjs",
+    "test:final-qa": "node --import tsx scripts/final-qa.mjs",
+    "test:e2e": "npm run test:final-qa && npm run test:cms-browser && npm run test:quiz-builder && npm run test:public-quiz && npm run test:result-builder && npm run test:smoke"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

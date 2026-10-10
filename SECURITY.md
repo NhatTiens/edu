@@ -1,6 +1,6 @@
 # Security model and audit
 
-Audit scope: the current application and migrations through `0011_security_followup.sql`, reviewed on top of upstream `4a2abea`. Local tests do not prove that an external Supabase project has applied these policies.
+Audit scope: the current application and migrations through `0012_final_qa.sql`, final QA on top of upstream `d4ccb04`. Local tests do not prove that an external Supabase project has applied these policies.
 
 ## Security model
 
@@ -89,3 +89,12 @@ For a database already at 0010, apply only supabase/migrations/0011_security_fol
 References for the implemented boundaries: [Next.js CSP and nonce guidance](https://nextjs.org/docs/app/guides/content-security-policy), [Supabase RLS](https://supabase.com/docs/guides/database/postgres/row-level-security) and [Supabase API keys](https://supabase.com/docs/guides/getting-started/api-keys). Repository tests remain the evidence for this project's behavior; documentation is not evidence of live deployment configuration.
 
 Verification result for this follow-up: typecheck, lint, 29 tests, production build, unconfigured smoke, public quiz browser suite and Result Builder/results data browser suite PASS. Browser checks ran with Chromium 133 using the executable override against the production app and local PostgreSQL WASM fixture. Responsive reports/results passed at 375, 768 and 1440 px. Production npm audit reported 0 advisories; full audit retained the 5 dev-only chain entries described above, and the registry still reported braces 3.0.3 as latest. These are local checks, not live Supabase or multi-connection PostgreSQL verification.
+
+
+## Final QA additions (0012)
+
+Dashboard and site presentation RPCs require active Admin membership in both the server repository and SQL. The presentation save locks one fixed settings row, requires its revision, rejects unknown fields/invalid values, and publishes only branding/social/SEO fields intended for public use. No caller-supplied row ID or SQL operation is accepted. The site-assets bucket is public for reads and active-admin-only for writes; application uploads use the existing image decoder/WebP sanitizer. Secrets must never be stored in presentation fields.
+
+The final QA suite exercises a production build with separate admin/participant browser contexts, authenticated CMS and settings writes, cookie/logout handling, scheduling, deadlines, replayed submissions, attempt limits and server failure recovery. The Auth and Storage adapters are emulators; RLS and SQL functions execute in PostgreSQL WASM. This does not verify live Supabase or real multi-connection contention. Existing DevTools answer-leakage tests remain in test:public-quiz. Apply 0012 after 0011 before deploying this application version.
+
+Final QA verification: npm install, lint, typecheck, 30 unit/database tests, production build and all six test:e2e suites PASS on 10/10/2026. Full admin-to-participant lifecycle passed at exactly 375×812, 768×1024 and 1440×900. Recovery from injected server failure passed after fixing retry to request fresh server data. This remains local verification with the limitations above.

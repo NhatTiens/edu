@@ -253,7 +253,7 @@ try {
   await save();
   await mkdir("artifacts/result-builder", { recursive: true });
   for (const width of [375, 768, 1440]) {
-    await page.setViewportSize({ width, height: 950 });
+    await page.setViewportSize({ width, height: {375:812,768:1024,1440:900}[width] });
     await page.screenshot({
       path: `artifacts/result-builder/admin-${width}.png`,
       fullPage: true,
@@ -280,7 +280,7 @@ try {
     0,
   );
   for (const width of [375, 768, 1440]) {
-    await resultPage.setViewportSize({ width, height: 950 });
+    await resultPage.setViewportSize({ width, height: {375:812,768:1024,1440:900}[width] });
     await resultPage.screenshot({
       path: `artifacts/result-builder/result-${width}.png`,
       fullPage: true,
@@ -354,7 +354,7 @@ try {
       .filter({ hasText: heading })
       .waitFor();
     for (const width of [375, 768, 1440]) {
-      await page.setViewportSize({ width, height: 950 });
+      await page.setViewportSize({ width, height: {375:812,768:1024,1440:900}[width] });
       assert.equal(
         await page.evaluate(
           () => document.documentElement.scrollWidth > innerWidth,
@@ -390,7 +390,7 @@ try {
   ])
     assert.ok(!(await resultPage.content()).includes(secret));
   for (const width of [375, 768, 1440]) {
-    await resultPage.setViewportSize({ width, height: 950 });
+    await resultPage.setViewportSize({ width, height: {375:812,768:1024,1440:900}[width] });
     assert.equal(
       await resultPage.evaluate(
         () => document.documentElement.scrollWidth > innerWidth,

@@ -8,7 +8,7 @@ if (process.env.NEXT_PUBLIC_SITE_URL)
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   productionBrowserSourceMaps: false,
-  experimental: { serverActions: { bodySizeLimit: "6mb" } },
+  experimental: { serverActions: { bodySizeLimit: "11mb" } },
 };
 
 export default nextConfig;

@@ -209,3 +209,11 @@ button:disabled { opacity:.6; cursor:wait; }.hero-side-card:after { pointer-even
 @media(max-width:760px){.quiz-center{padding:16px}.form-card{padding:22px}.question-grid{grid-template-columns:repeat(5,minmax(0,1fr))}.quiz-topbar>.row{flex-wrap:wrap}}
 .result-video{display:block;width:100%;aspect-ratio:16/9;border:0;border-radius:14px;background:#172033}.result-image{width:100%;height:auto;object-fit:contain;border-radius:14px}.result-block{min-width:0;overflow-wrap:anywhere}.result-block p{white-space:pre-wrap}.result-builder>*,.preview-phone{min-width:0}.block-library .builder-item{width:100%;overflow-wrap:anywhere}.result-blocks .btn{white-space:normal;max-width:100%}
 @media(max-width:760px){.result-hero{padding:20px}.preview-phone{padding:12px}.block-settings .input{min-width:0}}
+
+/* Final QA: keyboard focus, long content and disabled controls. */
+:focus-visible{outline:3px solid #0b5fd7;outline-offset:3px;scroll-margin-block:80px}
+button:disabled{cursor:not-allowed;transform:none}
+.table-wrap:focus-visible{outline-offset:0}
+.admin-card h2{font-size:20px;overflow-wrap:anywhere}.admin-content,.quiz-shell,.form-card,.quiz-card{overflow-wrap:anywhere}
+.dashboard-chart{height:210px;display:flex;align-items:flex-end;gap:8px}.dashboard-chart>div{flex:1;min-width:0;text-align:center;font-size:11px;display:grid;gap:6px}.dashboard-chart>div>div{background:var(--blue);border-radius:5px 5px 0 0}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.btn{transition:none}}

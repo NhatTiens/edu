@@ -2,7 +2,7 @@
 
 Security audit: see `SECURITY.md`. Apply `0010_security_audit.sql` after 0009, then `0011_security_followup.sql` (only 0011 if 0010 is already applied). Admin login now also requires the server service key and QUIZ_SESSION_SECRET for shared rate limiting. Configure the exact HTTPS NEXT_PUBLIC_SITE_URL in production (HTTP only for loopback development). Uploads are decoded and converted to WebP before Storage. No participant, password or token payload is logged.
 
-Ứng dụng Next.js App Router + TypeScript + Supabase cho khóa học và kiểm tra trực tuyến. Frontend gốc được giữ làm chuẩn visual. Đây là bản đang triển khai, chưa phải release production.
+Ứng dụng Next.js App Router + TypeScript + Supabase cho khóa học và kiểm tra trực tuyến. Frontend gốc được giữ làm chuẩn visual. Trạng thái QA và các điều kiện triển khai còn lại được ghi trong `IMPLEMENTATION_STATUS.md`.
 
 ## Chạy local
 
@@ -39,7 +39,7 @@ SUPABASE_SERVICE_ROLE_KEY=SERVER_ONLY_SERVICE_ROLE_KEY
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
 ```
 
-Với database mới, chạy `supabase/migrations/0001_initial.sql`, `0002_security_foundation.sql`, rồi `0003_production_foundation.sql` theo thứ tự. `supabase/schema.sql` là bản tổng hợp tương đương dành cho cài mới; chỉ chọn một cách. Nếu đã áp dụng schema gốc, backup và review dữ liệu trước khi chạy riêng 0002 rồi 0003. Migration sẽ rollback nếu dữ liệu cũ vi phạm constraint, không tự xóa dữ liệu để vượt lỗi. `supabase/seed.sql` nạp catalog, banner và quiz demo sau khi migration hoàn tất.
+Với database mới, chạy toàn bộ `supabase/migrations/0001_*.sql` đến `0012_*.sql` theo thứ tự. `supabase/schema.sql` là bản tổng hợp tương đương dành cho cài mới; chỉ chọn một cách. Nếu đã áp dụng schema gốc, backup và review dữ liệu trước khi chạy riêng 0002 rồi 0003. Migration sẽ rollback nếu dữ liệu cũ vi phạm constraint, không tự xóa dữ liệu để vượt lỗi. `supabase/seed.sql` nạp catalog, banner và quiz demo sau khi migration hoàn tất.
 
 Tạo tài khoản trong Supabase Auth rồi cấp quyền bằng SQL Editor đáng tin cậy, thay UUID bằng id thực của tài khoản. Membership không được phép ghi từ frontend, API public hay user_metadata.
 
@@ -54,7 +54,7 @@ on conflict (user_id) do nothing;
 
 Đăng nhập tại `/admin/login`. Proxy refresh session và kiểm tra membership `admins`; server layout kiểm tra lại `getAdmin()`. Từ migration 0004, quyền được xác nhận bằng RPC is_admin với cả admins và profiles active. Các action/API admin bổ sung sau này bắt buộc kiểm tra `getAdmin()` riêng và từ chối khi kết quả null; không dùng demo-page guard để cấp quyền ghi.
 
-Chế độ thật đã nối homepage, banners, catalog, nhóm khóa học, search và CRUD CMS có upload. Public quiz đã nối unlock/start/submit/result/leaderboard qua runtime 0006; analytics và Result Blocks CMS còn lại. Runtime thiếu cấu hình trả lỗi và không dùng dữ liệu giả. Dữ liệu demo không được dùng làm fallback khi Supabase lỗi. Thiếu cấu hình sẽ chặn admin và hiện lỗi tải catalog.
+Chế độ thật đã nối homepage, banners, catalog, nhóm khóa học, search và CRUD CMS có upload. Public quiz đã nối unlock/start/submit/result/leaderboard qua runtime 0006; analytics, Result Blocks CMS, dashboard và cài đặt website cũng đã nối database. Runtime thiếu cấu hình trả lỗi và không dùng dữ liệu giả. Dữ liệu demo không được dùng làm fallback khi Supabase lỗi. Thiếu cấu hình sẽ chặn admin và hiện lỗi tải catalog.
 
 `SUPABASE_SERVICE_ROLE_KEY` chỉ được dùng trong module server-only cho các transaction quiz tin cậy; không đưa biến này vào NEXT_PUBLIC, client bundle hoặc source control. Chưa có credential hoặc migration nào được áp dụng lên dịch vụ bên ngoài trong lượt tiếp quản này.
 
@@ -85,7 +85,7 @@ Apply `0005_quiz_builder.sql` after 0004. Fresh installs can use the consolidate
 
 Passwords are hashed server-side with scrypt and a unique 128-bit salt; no plaintext or hash is returned to the editor. Blank password preserves the current hash; Remove password clears it. SQL rejects unrecognized hash formats and password fields in document payloads. Admin-only RPC `admin_quiz_document` reads full answer keys; public question/option views remain strict allowlists. `admin_save_quiz` checks membership again, locks the quiz, checks updated_at, and replaces fields/questions/options/accepted answers in one transaction. Only trusted admin RPC can write these tables.
 
-The runtime now captures attempt snapshots. Builder still protects the original FK history by blocking content/field/password changes after attempts; status and visibility remain editable. Start uses the same quiz lock as builder saves and the same participant validator as preview. Result Block Builder is documented below; analytics remains separate work.
+The runtime now captures attempt snapshots. Builder still protects the original FK history by blocking content/field/password changes after attempts; status and visibility remain editable. Start uses the same quiz lock as builder saves and the same participant validator as preview. Result Block Builder and analytics are documented below.
 
 Validation: `npm run verify`; `npm run test:quiz-builder` runs Chromium against the actual app and a PostgreSQL WASM-backed HTTP fixture. It covers all eight field types, all three question types, save/reload, reorder, points, delete, preview and server password hashing. This is not a Supabase cloud/PostgREST integration test.
 
@@ -95,7 +95,7 @@ Apply `0006_public_quiz_runtime.sql` after 0005. It revokes anonymous/authentica
 
 Flow: `/q/[slug]` checks the database clock/status → password unlock when needed → dynamic participant form → start → `/attempt/[id]` → server submit/grading → `/result/[id]` → leaderboard. `/info` and `/instructions` redirect to the dynamic entry form. No public quiz path falls back to demo answers/results.
 
-Unlock uses a 256-bit opaque HttpOnly, SameSite=Strict cookie; only its SHA-256 hash is stored. HTTPS deployments use Secure cookies with the __Host- prefix (no Domain attribute), preventing sibling subdomains from overwriting these session cookies. Passwords travel only in POST JSON, never URLs. Unlock authorization lasts 1 hour; the opaque session can read owned attempts/results for 30 days and can be renewed after verifying the password. Post routes validate Origin and strict bounded JSON. Rate limits are stored atomically in PostgreSQL: 8 unlock checks/15 minutes per signed visitor/quiz plus 120/minute per quiz globally, including invalid passwords. No untrusted forwarded IP header is used as identity.
+Unlock uses a 256-bit opaque HttpOnly, SameSite=Strict cookie; only its SHA-256 hash is stored. HTTPS deployments use Secure cookies with the __Host- prefix (no Domain attribute), preventing sibling subdomains from overwriting these session cookies. Passwords travel only in POST JSON, never URLs. Unlock authorization lasts 1 hour; the opaque session can read owned attempts/results for 30 days and can be renewed after verifying the password. Post routes validate Origin and strict bounded JSON. Rate limits are stored atomically in PostgreSQL: 8 unlock checks/15 minutes per signed visitor/quiz, 60/15 minutes per quiz across visitors, and 600/minute globally, including invalid passwords. No untrusted forwarded IP header is used as identity.
 
 Start locks the quiz row, validates its current revision/schedule, validates participant data on the server, counts all prior attempts for the server-derived identity digest, captures a private question snapshot and sets `started_at`/deadline using the DB clock. A request UUID makes start retries idempotent; an existing active attempt for the same session is resumed. With an identifier field, normalization uses NFKC, trim, collapsed whitespace and lowercase; numbers additionally normalize leading/trailing zeroes. A keyed HMAC prevents offline guessing of the stored identity digest. Without an identifier, the limit is per signed browser cookie; clearing cookies/changing devices can create a different anonymous identity. A self-reported identifier is not verified identity—cross-device/person guarantees need authentication or OTP, outside this anonymous flow.
 
@@ -133,3 +133,26 @@ Analytics has no mock fallback. Participant count means distinct identity digest
 Participants CSV exports the current search across pages, up to 10,000 rows; larger matches return 413 and require a narrower search. It includes all configured participant fields for admins, UTF-8 BOM, escaped quotes/newlines, and spreadsheet formula neutralization. The route independently checks admin auth and sends no-store headers. Timestamps in CSV are ISO; screen submission times use Asia/Ho_Chi_Minh. This export is a single bounded RPC read, without a job queue or new infrastructure.
 
 Verification: `npm run verify` covers authorization, cross-attempt lookup, global rank pagination, literal search, aggregates, snapshot history, current public-field revocation and CSV escaping. `npm run test:result-builder` also exercises all five result-data pages and CSV against the production app with a local PostgreSQL WASM HTTP fixture. Live Supabase Auth/PostgREST deployment and multi-connection contention still require project credentials.
+
+
+## Final QA — 10/10/2026, upstream d4ccb04
+
+Chạy trên Node.js 22+ với Chromium đã cài:
+
+```bash
+npm install
+npm run lint
+npm run typecheck
+npm test
+npm run build
+npx playwright install chromium
+npm run test:e2e
+```
+
+Có thể đặt `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` để dùng Chromium có sẵn. `test:e2e` chạy tuần tự final lifecycle, CMS, Quiz Builder, public quiz/security, Result Builder/reports và smoke. Các suite tự khởi động production server local; không chạy đồng thời các suite dùng cùng port. `test:final-qa` dùng port 3360/3361, PostgreSQL WASM với toàn bộ migrations, Auth/Storage adapter chỉ dành cho test. Không dùng tài khoản hoặc dữ liệu production.
+
+Viewport chính xác: 375×812, 768×1024, 1440×900. Lifecycle tạo dữ liệu qua UI admin rồi làm bài bằng browser context riêng, kiểm tra reload/timer/submit/nộp trùng/limit/lịch mở đóng và báo cáo. Kiểm tra thêm labels, keyboard focus/scroll bảng, loading, disabled buttons, empty states, 404 và phục hồi lỗi server. Facebook/YouTube bên ngoài được route sang fixture; test xác minh URL/link/embed và cách mở an toàn, không chứng minh dịch vụ bên ngoài hoạt động. Ảnh và kết quả JSON được tạo tại `artifacts/final-qa/`.
+
+Migration mới: nếu database đã có 0011, chỉ áp dụng `supabase/migrations/0012_final_qa.sql` trước khi chạy bản app này. Nó thêm dashboard RPC, cài đặt `site.presentation`, RPC save có revision và bucket `site-assets`. Admin dashboard dùng dữ liệu thật, thống kê 7 ngày theo Asia/Ho_Chi_Minh. Settings lưu branding, Facebook/Zalo, SEO và ảnh vào database; logo/social image đi qua cùng bộ giải mã và chuyển WebP như thumbnail. Header và metadata đọc cấu hình đã lưu. Không chạy lại `schema.sql` trên database đang sử dụng.
+
+Local QA không thay thế Supabase Auth/PostgREST/Storage thật hoặc cạnh tranh giữa nhiều connection PostgreSQL. Chưa có credential để chạy những bước đó trong workspace. Xem `IMPLEMENTATION_STATUS.md`, `TASKS.md` và `SECURITY.md` trước khi release.

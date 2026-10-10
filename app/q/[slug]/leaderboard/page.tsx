@@ -23,7 +23,7 @@ export default async function Page({
         {!rows.length ? (
           <p>Chưa có kết quả hoặc bảng xếp hạng chưa được công bố.</p>
         ) : (
-          <div className="table-wrap">
+          <div className="table-wrap" tabIndex={0} role="region" aria-label="Bảng dữ liệu, cuộn ngang để xem thêm">
             <table>
               <thead>
                 <tr>
