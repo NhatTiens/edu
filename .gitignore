@@ -4,3 +4,7 @@ node_modules/
 !.env.example
 *.tsbuildinfo
 coverage/
+
+# Local deployment evidence and backups can contain machine metadata / private data.
+infra/reports/
+infra/backups/

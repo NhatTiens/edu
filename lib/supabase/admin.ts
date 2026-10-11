@@ -1,3 +1,4 @@
+import { supabaseTransport } from "@/lib/supabase/transport";
 import "server-only";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { supabaseConfig } from "@/lib/config";
@@ -9,6 +10,7 @@ export function createServiceClient() {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!serviceRoleKey) throw new Error("Thiếu SUPABASE_SERVICE_ROLE_KEY cho tác vụ máy chủ.");
   return createSupabaseClient<Database>(url, serviceRoleKey, {
+    global: { fetch: supabaseTransport(url) },
     auth: { autoRefreshToken: false, persistSession: false }
   });
 }

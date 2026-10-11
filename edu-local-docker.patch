@@ -1,0 +1,657 @@
+diff --git a/.dockerignore b/.dockerignore
+new file mode 100644
+index 0000000..92698c6
+--- /dev/null
++++ b/.dockerignore
+@@ -0,0 +1,12 @@
++.git
++node_modules
++.next
++.env*
++**/.env*
++infra/reports
++infra/backups
++artifacts
++coverage
++*.patch
++*.zip
++*.tsbuildinfo
+diff --git a/.env.example b/.env.example
+index 4aadcbd..1c24e59 100644
+--- a/.env.example
++++ b/.env.example
+@@ -12,3 +12,7 @@ NEXT_PUBLIC_SITE_URL=http://localhost:3000
+ # Required for public quiz identity cookies/digests. Generate a random value >=32 characters.
+ # Never prefix this variable with NEXT_PUBLIC_. Keep stable across deployments.
+ QUIZ_SESSION_SECRET=
++
++# Optional server transport for Docker; browser URL above stays reachable from Windows.
++# Leave empty outside Docker. Do not prefix with NEXT_PUBLIC_.
++SUPABASE_INTERNAL_URL=
+diff --git a/.gitignore b/.gitignore
+index 67ddb70..1794e58 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -4,3 +4,7 @@ node_modules/
+ !.env.example
+ *.tsbuildinfo
+ coverage/
++
++# Local deployment evidence and backups can contain machine metadata / private data.
++infra/reports/
++infra/backups/
+diff --git a/DEPLOYMENT_TASKS.md b/DEPLOYMENT_TASKS.md
+new file mode 100644
+index 0000000..c6a1149
+--- /dev/null
++++ b/DEPLOYMENT_TASKS.md
+@@ -0,0 +1,59 @@
++# Deployment local trước VPS
++
++Cập nhật 11/10/2026. Baseline GitHub main: `b1e0d74b8268c270520f2607b2e9d293f7e3e76a`. Phạm vi chỉ deployment; frontend, CMS, quiz, grading và leaderboard giữ nguyên. Checklist sản phẩm trong TASKS.md không được viết lại.
++
++## Những gì đã sẵn sàng
++
++Source hiện có Next.js 16.4.0, React 19, lockfile, Node >=22 và migrations 0001 đến 0012. Tính năng hoàn thiện theo báo cáo người dùng và TASKS.md. Báo cáo QA trước đó trong repository dùng PostgreSQL WASM và HTTP fixtures; không dùng nó để khẳng định trạng thái Supabase trên Windows.
++
++Môi trường Work thực tế là Ubuntu 24.04.3 x86_64, Node v24.19.0. Không có Docker CLI, Docker socket, hoặc kết nối điều khiển Docker Desktop của máy Windows. Vì vậy trạng thái containers, networks, volumes, ports, migrations đã áp dụng, Auth, Storage và DB trên máy người dùng hiện là CHƯA XÁC MINH. Không có .env.local/credential trong checkout và không yêu cầu gửi secret qua chat.
++
++Đã thêm Dockerfile nhiều giai đoạn, standalone output, Compose chỉ chạy web, `.dockerignore`, cấu hình public/build và secret/runtime tách biệt. Server transport hỗ trợ đường về host, giữ nguyên public Storage URL và cookie namespace. Đã tạo script PowerShell audit chỉ đọc, initialize không ghi đè, build/start, dependency/HTTP smoke và stop riêng web. Không quản lý volume Supabase, không apply migration, không nạp seed và không chuyển dữ liệu.
++
++## Những gì cần chạy trên Windows
++
++Chạy Inspect-Local để xác minh OS, Node, Docker Desktop, daemon Linux, Compose >=2.30, Docker context, containers kể cả đã dừng, mounts, networks, volumes và cổng đang nghe. Khi có nhiều DB container, chọn đúng tên bằng -DbContainer. Kiểm tra report không có blocked trước khi kết luận DB được audit.
++
++Đối chiếu 12 file migration với lịch sử DB. Script ghi các version chưa thấy, nhưng không chứng minh SQL đã áp dụng đúng checksum và không tự apply. Nếu lịch sử không có hoặc version khác quy ước, review schema và history trước; tuyệt đối không replay toàn bộ schema. Xác minh không còn migration đang chạy.
++
++Đọc report Auth user count, Storage bucket/object counts, version/dung lượng PostgreSQL, estimates theo bảng và mount nguồn lưu trữ. Counts không thay thế kiểm tra dữ liệu ảnh và backup. So sánh số liệu trước/sau local deployment, giải thích mọi thay đổi do phiên test; không được mất dữ liệu cũ.
++
++Chạy Initialize-Local với file môi trường đang hoạt động. Giữ nguyên keys và QUIZ_SESSION_SECRET; kiểm tra origin/site port. Kiểm tra gateway API Supabase từ Windows và từ probe container, giữ Auth site URL/redirect allowlist khớp nếu flow sử dụng chúng. Không tự mở cổng PostgreSQL ra internet.
++
++Chạy Start-Local. Docker image build, Linux container runtime và kết nối Supabase thật chỉ được đánh dấu hoàn tất khi chạy trên máy này thành công. Không đổi sang self-hosted Supabase Compose trong giai đoạn local app-only.
++
++## Rủi ro dữ liệu và cách kiểm soát
++
++Compose app không sở hữu DB/Storage/Auth nên stop/recreate web không xóa các volume đó. Không dùng reset, prune, down -v, seed hoặc schema.sql trên dữ liệu hiện hữu. Ứng dụng thật vẫn có thể ghi dữ liệu khi người dùng thực hiện thao tác; các probe tự động chỉ đọc, manual lifecycle phải dùng quiz và participant thử nghiệm riêng.
++
++QUIZ_SESSION_SECRET thay đổi sẽ ảnh hưởng nhận diện/session, JWT keys đổi có thể ảnh hưởng Auth. Không tự tái tạo secret hoặc copy secret vào Dockerfile. Runtime environment nằm trong file bị ignore; Docker admin có thể đọc nó nên bảo vệ tài khoản máy chủ. Không gửi file runtime, dump DB hay báo cáo chứa dữ liệu cá nhân lên Git.
++
++Backup PostgreSQL đơn lẻ không đủ để phục hồi Storage bytes. Nếu chuyển stack/VPS: phải có backup đầy đủ, consistency window, manifest/checksum, bản sao ngoài máy và restore thử vào stack/volume riêng trước. Quy trình chi tiết trong infra/README.md. Chưa backup và chưa restore trong Work; không có bằng chứng để cho phép cutover hiện tại.
++
++## Các bước kiểm thử chấp nhận
++
++Trên Work: cài lockfile, typecheck, lint, unit/SQL regression, production standalone build; kiểm thử transport bảo toàn body/header/query và public Storage URL. Kiểm thử startup của standalone artifact và cấu hình deploy với dữ liệu giả trong thư mục tạm, không nối tới dữ liệu người dùng. Kết quả thực tế cuối lượt nằm ở cuối file này.
++
++Trên Windows: kiểm tra container healthy, Auth health và public PostgREST probe; mở homepage, ảnh thật, khóa học và search. Đăng nhập admin đúng/sai, tải lại session, logout rồi truy cập /admin phải quay về login. Xác minh refresh token sau hết hạn access token. Không coi status 200 của login là xác nhận Auth thành công.
++
++Dùng một quiz test riêng để kiểm tra password, start, autosave, reload, timer, submit, retry submit, result và leaderboard. So sánh grading/ranking mong đợi; kiểm tra không đọc được attempt của phiên khác và correct answer qua public request. Kiểm tra upload một ảnh test, đọc lại bytes sau restart riêng web, bảo đảm ảnh cũ còn đọc được. Dữ liệu kiểm thử chỉ được dọn bằng quy trình riêng đã thống nhất, script deployment không tự xóa.
++
++Restart riêng container web rồi kiểm tra login và attempt có thể tiếp tục; PostgreSQL/Auth/Storage mounts và dữ liệu cũ phải nguyên vẹn. Chạy Test-Local và Inspect-Local lần nữa để giữ bằng chứng. Các E2E repository dùng fixture không được chạy nhầm với DB thật để coi là production acceptance.
++
++## Điều kiện chuyển lên VPS
++
++Phải hoàn tất audit máy thật, test local lifecycle, backup và restore rehearsal; chốt phiên bản/digest image Supabase và web; ghi rõ migration đã áp dụng; kiểm thử contention PostgreSQL nhiều connections. Chọn topology Supabase self-hosted phù hợp, không dùng Supabase CLI development stack như cấu hình production mặc định.
++
++Cần domain HTTPS, reverse proxy có giới hạn request phù hợp upload 11 MiB, origin/CSRF/Auth allowlist đúng, firewall không public PostgreSQL/Studio, secret provisioning, giám sát disk/backup/error, retention và rollback với image cũ. Public NEXT_PUBLIC_* được đóng vào bundle nên đổi domain cần rebuild; kiểm tra và lập phương án URL Storage cũ, không tự sửa DB trong local deployment.
++
++Chưa deploy VPS, chưa publish internet, chưa migrate dữ liệu. Quyết định cutover chỉ sau khi kiểm tra staging/restore chứng minh đạt các điều kiện trên.
++
++## Kết quả kiểm chứng trong lượt này
++
++`npm ci --no-audit --no-fund`, `npm run typecheck`, `npm run lint`, `npm test` (32/32) và `npm run build`: PASS. Build tạo standalone server; smoke bằng Node xác nhận login HTTP 200, admin chưa đăng nhập redirect về login và JavaScript tĩnh HTTP 200. Test không dùng credential thật.
++
++Kiểm tra cấu hình trong thư mục tạm: PASS với secret chứa `$` và `#`, bảo toàn file nguồn, không đưa secret vào build config, từ chối ghi đè và phát hiện mismatch giữa build/runtime. PowerShell 7.4.6 parser: PASS cho cả 6 script. Đã chạy audit trên môi trường không có Docker và xác nhận ghi report blocked rõ ràng. Chưa chạy PowerShell 5.1 trên Windows, Docker build/runtime hoặc Supabase integration trên máy người dùng.
++
++Compose 2.30.3 `config --quiet`: PASS với môi trường giả tạm thời, không dùng Docker daemon. Audit PowerShell cũng đã chạy qua nhánh đầy đủ bằng mock Docker (container discovery, metadata, truy vấn chỉ đọc và đối chiếu version migration): PASS. Đây là kiểm tra script/config, không phải bằng chứng container Windows hoặc dữ liệu Supabase thật đang hoạt động.
++
++GitHub write integration trả HTTP 403 khi tạo tree; chưa tạo remote branch/PR và không có thay đổi trên GitHub. Bàn giao bằng patch dựa trên baseline b1e0d74; chạy `git apply --check` trước khi áp dụng vào checkout của người dùng. Không bypass quyền truy cập bằng phương thức khác.
+diff --git a/README.md b/README.md
+index 643024b..a7621ce 100644
+--- a/README.md
++++ b/README.md
+@@ -156,3 +156,7 @@ Viewport chính xác: 375×812, 768×1024, 1440×900. Lifecycle tạo dữ liệ
+ Migration mới: nếu database đã có 0011, chỉ áp dụng `supabase/migrations/0012_final_qa.sql` trước khi chạy bản app này. Nó thêm dashboard RPC, cài đặt `site.presentation`, RPC save có revision và bucket `site-assets`. Admin dashboard dùng dữ liệu thật, thống kê 7 ngày theo Asia/Ho_Chi_Minh. Settings lưu branding, Facebook/Zalo, SEO và ảnh vào database; logo/social image đi qua cùng bộ giải mã và chuyển WebP như thumbnail. Header và metadata đọc cấu hình đã lưu. Không chạy lại `schema.sql` trên database đang sử dụng.
+ 
+ Local QA không thay thế Supabase Auth/PostgREST/Storage thật hoặc cạnh tranh giữa nhiều connection PostgreSQL. Chưa có credential để chạy những bước đó trong workspace. Xem `IMPLEMENTATION_STATUS.md`, `TASKS.md` và `SECURITY.md` trước khi release.
++
++## Docker local trước VPS
++
++Cấu hình deployment nằm trong `infra/`, hướng dẫn PowerShell ở `infra/README.md`, trạng thái và điều kiện chuyển VPS ở `DEPLOYMENT_TASKS.md`. Compose chỉ chạy web và kết nối tới Supabase local hiện hữu; không reset, seed hoặc tự áp dụng migration.
+diff --git a/infra/Dockerfile b/infra/Dockerfile
+new file mode 100644
+index 0000000..7cc53c1
+--- /dev/null
++++ b/infra/Dockerfile
+@@ -0,0 +1,27 @@
++# syntax=docker/dockerfile:1
++FROM node:22-bookworm-slim AS dependencies
++WORKDIR /app
++COPY package.json package-lock.json ./
++RUN npm ci --no-audit --no-fund
++
++FROM dependencies AS builder
++COPY . .
++ARG NEXT_PUBLIC_SUPABASE_URL
++ARG NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
++ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
++ARG NEXT_PUBLIC_SITE_URL
++ENV NEXT_TELEMETRY_DISABLED=1
++# No service key or session secret is supplied during image construction.
++RUN npm run typecheck && npm run lint && npm run build && mkdir -p public
++
++FROM node:22-bookworm-slim AS runner
++WORKDIR /app
++ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 HOSTNAME=0.0.0.0 PORT=3000
++COPY --from=builder --chown=node:node /app/.next/standalone ./
++COPY --from=builder --chown=node:node /app/.next/static ./.next/static
++COPY --from=builder --chown=node:node /app/public ./public
++COPY --chown=node:node infra/check-runtime.mjs ./infra/check-runtime.mjs
++USER node
++EXPOSE 3000
++HEALTHCHECK --interval=20s --timeout=5s --start-period=30s --retries=3 CMD node -e "fetch('http://127.0.0.1:3000/admin/login',{redirect:'manual'}).then(r=>process.exit(r.status===200?0:1)).catch(()=>process.exit(1))"
++CMD ["node", "server.js"]
+diff --git a/infra/README.md b/infra/README.md
+new file mode 100644
+index 0000000..3536a59
+--- /dev/null
++++ b/infra/README.md
+@@ -0,0 +1,65 @@
++# Chạy Docker local với Supabase hiện hữu
++
++Cấu hình này chỉ quản lý container Next.js thuộc Compose project `edu-local-web`. Nó không tạo, khởi động lại hoặc quản lý Supabase; không khai báo volume database, không reset, seed hay apply migration. Chưa chuyển sang Supabase Compose self-hosted.
++
++## Điều kiện
++
++Windows có Docker Desktop đang chạy Linux containers, Compose 2.30 trở lên, Node.js 22 trở lên và PowerShell 5.1 hoặc 7. Supabase local của đúng dự án đã chạy và `.env.local` đã hoạt động. Không dùng Docker context từ xa. Cần internet lần đầu để tải base image và dependencies. Không cần cài npm dependencies trên Windows để chạy các script cấu hình.
++
++Giữ nguyên `NEXT_PUBLIC_SUPABASE_URL`, public key, service key và `QUIZ_SESSION_SECRET` hiện có. Public URL là `http://127.0.0.1:<port-thực-tế>` hoặc localhost để browser Windows truy cập. Server trong container dùng `SUPABASE_INTERNAL_URL=http://host.docker.internal:<cùng-port>`. Transport chỉ đổi đích request; URL ảnh public và tên cookie Auth không bị đổi. Nếu Supabase port chỉ bind loopback và Docker Desktop không chuyển tiếp được, bước probe sẽ dừng trước `up`; không tự mở DB ra LAN. Xem cấu hình Docker Desktop/firewall và kiểm tra cổng gateway API, không nhầm cổng PostgreSQL 54322 với API 54321.
++
++`NEXT_PUBLIC_SITE_URL` phải đúng origin truy cập, ví dụ `http://localhost:3000`. Dừng riêng tiến trình `npm run dev` nếu nó chiếm cổng 3000; không dừng Supabase. Muốn dùng cổng khác, tạo một bản sao riêng của `.env.local`, sửa SITE_URL trong bản sao rồi truyền `-SourceEnv`. Cookies không phân biệt port; tránh đăng nhập đồng thời hai phiên app trên cùng hostname.
++
++## PowerShell từ thư mục repository
++
++```powershell
++powershell -NoProfile -ExecutionPolicy Bypass -File .\infra\scripts\Inspect-Local.ps1
++powershell -NoProfile -ExecutionPolicy Bypass -File .\infra\scripts\Initialize-Local.ps1
++powershell -NoProfile -ExecutionPolicy Bypass -File .\infra\scripts\Start-Local.ps1
++```
++
++Nếu có nhiều Supabase project, kiểm tra `docker ps` và chạy lại audit với đúng tên DB, ví dụ tên trả về từ máy bạn:
++
++```powershell
++.\infra\scripts\Inspect-Local.ps1 -DbContainer 'TEN_CONTAINER_DB_THUC_TE'
++```
++
++Không dùng chuỗi tên ví dụ như tên thật. Báo cáo lưu dưới `infra/reports/`, không đưa vào Git. Audit chỉ đọc DB bằng `BEGIN READ ONLY`, chỉ lấy số lượng và metadata, không xuất email, token, đáp án hay giá trị biến môi trường. Báo cáo chứa đường dẫn máy và metadata nên cần xem trước khi chia sẻ. Nếu `psql` bị từ chối, báo cáo ghi blocked; không tự thay password hoặc trust policy. Các schema/tables thiếu có thể khiến phần DB dừng; những mục khác vẫn được lưu.
++
++Initialize tạo mới `infra/.env.compose` (cấu hình public cho build) và `infra/.env.runtime` (secret cho runtime), không ghi đè nếu đã tồn tại. Parser hỗ trợ KEY=value một dòng, giá trị có dấu nháy đơn hoặc nháy kép; không hỗ trợ shell expansion hay multiline. Không tự tạo hoặc đổi secret. Compose đọc runtime dạng raw để giữ nguyên `$` trong secret. File runtime chỉ chứa các biến được ứng dụng này sử dụng. Giữ file này trong tài khoản Windows của bạn, không đưa vào thư mục chia sẻ hoặc gửi kèm report.
++
++Start kiểm tra config mà không in secret, build, chạy probe đọc Auth/PostgREST, rồi mới khởi chạy web và smoke test. Image build chạy typecheck, lint, production build. Secret không vào build context hoặc build args. Image chạy user `node`, port chỉ bind `127.0.0.1`, log có giới hạn, không mount Docker socket. Base image `node:22-bookworm-slim` là tag cập nhật; trước VPS cần pin digest đã kiểm thử và lưu image cũ để rollback.
++
++```powershell
++.\infra\scripts\Test-Local.ps1
++.\infra\scripts\Stop-Local.ps1
++```
++
++Stop chỉ dừng web. Không chạy `docker compose down -v`, `docker system prune`, `supabase db reset`, `supabase stop --no-backup` hoặc xóa volume. Không áp dụng `schema.sql` lên database hiện hữu.
++
++## Chẩn đoán
++
++```powershell
++docker compose --project-name edu-local-web --env-file .\infra\.env.compose -f .\infra\compose.local.yml ps
++docker compose --project-name edu-local-web --env-file .\infra\.env.compose -f .\infra\compose.local.yml logs --tail 80 web
++```
++
++Không dùng `docker compose config` không có `--quiet`, hoặc xuất đầy đủ `docker inspect`: chúng có thể hiển thị secret. Người có quyền Docker vốn có thể đọc runtime environment; không chia sẻ quyền Docker cho người không tin cậy.
++
++Nếu homepage báo lỗi dù HTTP 200, xem nội dung và log; smoke HTTP không thay thế kiểm thử dữ liệu thật. Nếu login redirect sai, kiểm tra SITE_URL chính xác, public/internal API URL và Auth allowlist ở cấu hình Supabase hiện hữu. Repo chưa có config.toml nên không tự tạo đè config Supabase nằm ở thư mục khác. Password login hiện có không dùng OAuth callback; các flow email/OAuth tương lai vẫn cần site URL/redirect allowlist đúng.
++
++Nếu build thành công nhưng start/probe thất bại, không reset Supabase. App cũ đang chạy vẫn được giữ nếu probe trước `up` lỗi. Sau `up`, image cũ chỉ rollback được nếu đã giữ tag/digest riêng; không coi `restart: unless-stopped` là rollback. Thay public URL/key/site URL yêu cầu rebuild; thay runtime secret có thể làm mất hiệu lực session/identity nên phải có kế hoạch riêng.
++
++## Backup trước khi chuyển dữ liệu
++
++Lượt này không chuyển DB nên không tạo một bản backup giả định. Khi chuẩn bị self-hosted VPS, phải dừng các nguồn ghi trong một cửa sổ bảo trì và backup PostgreSQL đầy đủ (schema, dữ liệu public/auth/storage, extensions, grants và roles), file/object Storage thực tế, cấu hình Supabase, JWT/crypto keys và QUIZ_SESSION_SECRET. SQL dump `storage.objects` không chứa bytes ảnh. Không tar trực tiếp volume PostgreSQL đang ghi để coi là backup nhất quán.
++
++Lưu backup mã hóa ngoài máy, manifest gồm image versions, migration history, mounts, object inventory và checksum; không lưu secret trong Git. Restore vào một stack biệt lập, tuyệt đối không trỏ restore vào volume gốc. Kiểm tra số lượng users/rows/objects, login mật khẩu cũ, đọc ảnh thật, quyền RLS, submit và ranking trước cutover. Đổi hostname cần kiểm tra URL ảnh đã lưu trong DB; transport giữ nguyên chúng trong local, không tự rewrite dữ liệu khi sang domain VPS.
++
++## Tài liệu kỹ thuật đã đối chiếu
++
++Next.js: https://nextjs.org/docs/app/guides/self-hosting
++
++Docker: https://docs.docker.com/guides/nextjs/
++
++Docker Desktop: https://docs.docker.com/desktop/features/networking/networking-how-tos/
+diff --git a/infra/check-runtime.mjs b/infra/check-runtime.mjs
+new file mode 100644
+index 0000000..d57b358
+--- /dev/null
++++ b/infra/check-runtime.mjs
+@@ -0,0 +1,15 @@
++// Read-only dependency check; does not log credentials, bodies or participant data.
++const base = process.env.SUPABASE_INTERNAL_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
++const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
++if (!base || !key || !process.env.SUPABASE_SERVICE_ROLE_KEY || (process.env.QUIZ_SESSION_SECRET || '').length < 32)
++  throw new Error('Missing required runtime configuration.');
++for (const path of ['/auth/v1/health', '/rest/v1/courses?select=id&limit=1']) {
++  try {
++    const response = await fetch(new URL(path, base), { headers: { apikey: key }, redirect: 'error', signal: AbortSignal.timeout(10000) });
++    if (!response.ok) throw new Error(`HTTP ${response.status}`);
++    console.log(`PASS ${path.split('?')[0]}`);
++  } catch {
++    console.error(`FAIL ${path.split('?')[0]}: check Supabase, transport, grants and key.`);
++    process.exitCode = 1;
++  }
++}
+diff --git a/infra/compose.local.yml b/infra/compose.local.yml
+new file mode 100644
+index 0000000..98edc41
+--- /dev/null
++++ b/infra/compose.local.yml
+@@ -0,0 +1,34 @@
++# App-only deployment. Supabase containers/networks/volumes stay untouched.
++name: edu-local-web
++services:
++  web:
++    image: edu-local-web:${EDU_IMAGE_TAG:-local}
++    build:
++      context: ..
++      dockerfile: infra/Dockerfile
++      args:
++        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:?Initialize deployment first}
++        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:-}
++        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
++        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:?Initialize deployment first}
++    env_file:
++      - path: .env.runtime
++        format: raw
++    environment:
++      NODE_ENV: production
++      APP_DATA_MODE: supabase
++      HOSTNAME: 0.0.0.0
++      PORT: '3000'
++    ports:
++      - '127.0.0.1:${EDU_HTTP_PORT:-3000}:3000'
++    extra_hosts:
++      - 'host.docker.internal:host-gateway'
++    init: true
++    restart: unless-stopped
++    cap_drop: [ALL]
++    security_opt: [no-new-privileges:true]
++    logging:
++      driver: json-file
++      options:
++        max-size: '10m'
++        max-file: '3'
+diff --git a/infra/configure.mjs b/infra/configure.mjs
+new file mode 100644
+index 0000000..5c6dc9a
+--- /dev/null
++++ b/infra/configure.mjs
+@@ -0,0 +1,73 @@
++import fs from 'node:fs';
++import path from 'node:path';
++import { fileURLToPath } from 'node:url';
++const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
++const required = ['NEXT_PUBLIC_SUPABASE_URL','NEXT_PUBLIC_SITE_URL','SUPABASE_SERVICE_ROLE_KEY','QUIZ_SESSION_SECRET'];
++function parse(file) {
++  const result = {};
++  for (const raw of fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '').split(/\r?\n/)) {
++    const line = raw.trim();
++    if (!line || line.startsWith('#')) continue;
++    const match = line.match(/^([A-Z][A-Z0-9_]*)\s*=\s*(.*)$/);
++    if (!match) throw new Error('Unsupported environment syntax. Use single-line KEY=value entries.');
++    let value = match[2];
++    if (value.startsWith('"')) { try { value = JSON.parse(value); } catch { throw new Error('Invalid quoted environment value.'); } }
++    else if (value.startsWith("'")) {
++      if (!value.endsWith("'")) throw new Error('Invalid quoted environment value.');
++      value = value.slice(1, -1);
++    } else value = value.replace(/\s+#.*$/, '').trim();
++    if (/[\r\n\0]/.test(value)) throw new Error('Multiline environment values are unsupported.');
++    result[match[1]] = value;
++  }
++  return result;
++}
++function validate(env) {
++  for (const name of required) if (!env[name]) throw new Error(`Missing ${name}`);
++  if (env.QUIZ_SESSION_SECRET.length < 32) throw new Error('QUIZ_SESSION_SECRET must contain at least 32 characters; reuse the existing secret.');
++  if (!env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY && !env.NEXT_PUBLIC_SUPABASE_ANON_KEY) throw new Error('Missing public Supabase key.');
++  for (const name of ['NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY','NEXT_PUBLIC_SUPABASE_ANON_KEY']) {
++    const key = env[name] || '';
++    let role;
++    try { role = JSON.parse(Buffer.from(key.split('.')[1], 'base64url').toString()).role; } catch { /* publishable key need not be a JWT */ }
++    if (key.startsWith('sb_secret_') || ['service_role','supabase_admin'].includes(role)) throw new Error(`Privileged key in ${name}`);
++  }
++  for (const name of ['NEXT_PUBLIC_SUPABASE_URL','NEXT_PUBLIC_SITE_URL']) {
++    const url = new URL(env[name]);
++    if (!['localhost','127.0.0.1','[::1]'].includes(url.hostname) || url.protocol !== 'http:' || url.pathname !== '/' || url.search || url.hash || url.username || url.password)
++      throw new Error(`${name} must be an HTTP loopback origin for this local-only configuration.`);
++  }
++}
++try {
++  if (Number(process.versions.node.split('.')[0]) < 22) throw new Error('Node.js 22+ is required.');
++  if (process.argv[2] === '--check') {
++    // Runtime file uses Compose raw semantics; quotes and $ are literal.
++    const env = Object.fromEntries(fs.readFileSync(path.join(root,'infra/.env.runtime'),'utf8').split(/\r?\n/).filter(Boolean).map(line=>{ const i=line.indexOf('='); return [line.slice(0,i),line.slice(i+1)]; }));
++    validate(env);
++    const build = parse(path.join(root,'infra/.env.compose'));
++    for (const name of Object.keys(build).filter(k=>k.startsWith('NEXT_PUBLIC_'))) if ((env[name] || '') !== build[name]) throw new Error(`Build/runtime mismatch for ${name}. Reinitialize and rebuild explicitly.`);
++    const port = Number(new URL(env.NEXT_PUBLIC_SITE_URL).port || 80);
++    if (port !== Number(build.EDU_HTTP_PORT)) throw new Error('Site origin and published port differ.');
++    const target = new URL(env.SUPABASE_INTERNAL_URL);
++    if (!['http:','https:'].includes(target.protocol) || target.username || target.password || target.pathname !== '/' || target.search || target.hash || ['localhost','127.0.0.1','[::1]'].includes(target.hostname)) throw new Error('Invalid container transport origin.');
++    console.log('Configuration valid; no secret values displayed.');
++  } else {
++    const source = path.resolve(process.argv[2] || path.join(root,'.env.local'));
++    const destinations = ['.env.compose','.env.runtime'].map(x=>path.join(root,'infra',x));
++    if (destinations.some(x=>fs.existsSync(x))) throw new Error('Deployment environment already exists. No files overwritten. Move the old deployment files to a private backup before reinitializing.');
++    const env = parse(source);
++    validate(env);
++    const publicNames = ['NEXT_PUBLIC_SUPABASE_URL','NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY','NEXT_PUBLIC_SUPABASE_ANON_KEY','NEXT_PUBLIC_SITE_URL'];
++    const publicValues = Object.fromEntries(publicNames.map(k=>[k,env[k] || '']));
++    if (Object.values(publicValues).some(v=>/[\s$#'"\\]/.test(v))) throw new Error('Unsupported public configuration characters.');
++    const sourceUrl = new URL(env.NEXT_PUBLIC_SUPABASE_URL);
++    const internal = process.argv[3] || `http://host.docker.internal:${sourceUrl.port || 80}`;
++    const target = new URL(internal);
++    if (target.protocol !== 'http:' || target.username || target.password || target.pathname !== '/' || target.search || target.hash || ['localhost','127.0.0.1','[::1]'].includes(target.hostname)) throw new Error('Use an HTTP container-reachable internal origin.');
++    const runtime = { APP_DATA_MODE:'supabase', ...publicValues, SUPABASE_SERVICE_ROLE_KEY:env.SUPABASE_SERVICE_ROLE_KEY, QUIZ_SESSION_SECRET:env.QUIZ_SESSION_SECRET, SUPABASE_INTERNAL_URL:target.origin };
++    const build = {...publicValues, EDU_HTTP_PORT:new URL(env.NEXT_PUBLIC_SITE_URL).port || '80', EDU_IMAGE_TAG:'local'};
++    const serialize = value => Object.entries(value).map(([k,v])=>`${k}=${v}`).join('\n')+'\n';
++    fs.writeFileSync(destinations[0],serialize(build),{flag:'wx',mode:0o600});
++    fs.writeFileSync(destinations[1],serialize(runtime),{flag:'wx',mode:0o600});
++    console.log('Created private deployment environment. Existing source environment and secrets unchanged.');
++  }
++} catch (error) { console.error(error instanceof Error && error.code ? 'Cannot access deployment configuration files.' : error.message); process.exitCode=1; }
+diff --git a/infra/scripts/Common.ps1 b/infra/scripts/Common.ps1
+new file mode 100644
+index 0000000..2e2f34d
+--- /dev/null
++++ b/infra/scripts/Common.ps1
+@@ -0,0 +1,22 @@
++Set-StrictMode -Version Latest
++$ErrorActionPreference = 'Stop'
++$script:RepoRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
++function Invoke-Docker {
++    param([Parameter(Mandatory=$true)][string[]]$DockerArgs)
++    $result = & docker @DockerArgs
++    if ($LASTEXITCODE -ne 0) { throw 'Docker operation failed. No subsequent step was executed.' }
++    return $result
++}
++function Assert-LocalDocker {
++    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { throw 'Docker CLI not found. Install/start Docker Desktop using Linux containers.' }
++    $context = (Invoke-Docker -DockerArgs @('context','show') | Out-String).Trim()
++    $endpoint = (Invoke-Docker -DockerArgs @('context','inspect',$context,'--format','{{.Endpoints.docker.Host}}') | Out-String).Trim()
++    if ($env:DOCKER_HOST -or $endpoint -notmatch '^(npipe:|unix:)') { throw 'Only a local Docker Desktop context is supported. Inspect DOCKER_HOST/context before proceeding.' }
++    $os = (Invoke-Docker -DockerArgs @('info','--format','{{.OSType}}') | Out-String).Trim()
++    if ($os -ne 'linux') { throw 'Switch Docker Desktop to Linux containers.' }
++    $versionText = (Invoke-Docker -DockerArgs @('compose','version','--short') | Out-String).Trim().TrimStart('v')
++    if ([version]($versionText.Split('-')[0]) -lt [version]'2.30.0') { throw 'Docker Compose 2.30+ is required for raw env_file handling.' }
++}
++function Get-ComposeArgs {
++    return @('compose','--project-name','edu-local-web','--env-file',(Join-Path $script:RepoRoot 'infra/.env.compose'),'-f',(Join-Path $script:RepoRoot 'infra/compose.local.yml'))
++}
+diff --git a/infra/scripts/Initialize-Local.ps1 b/infra/scripts/Initialize-Local.ps1
+new file mode 100644
+index 0000000..a065a87
+--- /dev/null
++++ b/infra/scripts/Initialize-Local.ps1
+@@ -0,0 +1,10 @@
++[CmdletBinding()]
++param([string]$SourceEnv, [string]$InternalUrl)
++. (Join-Path $PSScriptRoot 'Common.ps1')
++Assert-LocalDocker
++if (-not (Get-Command node -ErrorAction SilentlyContinue)) { throw 'Node.js 22+ is needed for configuration validation on Windows.' }
++if (-not $SourceEnv) { $SourceEnv = Join-Path $script:RepoRoot '.env.local' }
++$nodeArgs = @((Join-Path $script:RepoRoot 'infra/configure.mjs'),$SourceEnv)
++if ($InternalUrl) { $nodeArgs += $InternalUrl }
++& node @nodeArgs
++if ($LASTEXITCODE -ne 0) { throw 'Environment initialization failed.' }
+diff --git a/infra/scripts/Inspect-Local.ps1 b/infra/scripts/Inspect-Local.ps1
+new file mode 100644
+index 0000000..c4103c1
+--- /dev/null
++++ b/infra/scripts/Inspect-Local.ps1
+@@ -0,0 +1,65 @@
++[CmdletBinding()]
++param([string]$DbContainer)
++. (Join-Path $PSScriptRoot 'Common.ps1')
++$reportDir = Join-Path $script:RepoRoot 'infra/reports'
++New-Item -ItemType Directory -Force -Path $reportDir | Out-Null
++$report = [ordered]@{ checked_at = (Get-Date).ToUniversalTime().ToString('o'); os = [Environment]::OSVersion.VersionString; powershell = $PSVersionTable.PSVersion.ToString() }
++if (Get-Command node -ErrorAction SilentlyContinue) { $report.node = (& node --version | Out-String).Trim() } else { $report.node = 'NOT_FOUND' }
++$desktop = if ($env:ProgramFiles) { Join-Path $env:ProgramFiles 'Docker/Docker/Docker Desktop.exe' } else { $null }
++$report.docker_desktop = if ($desktop -and (Test-Path $desktop)) { (Get-Item $desktop).VersionInfo.ProductVersion } else { 'NOT_FOUND_AT_DEFAULT_PATH' }
++$report.environment_files = @()
++foreach ($file in @('.env.local','.env','infra/.env.runtime','infra/.env.compose')) {
++    $full = Join-Path $script:RepoRoot $file
++    if (Test-Path $full) {
++        $names = @(Get-Content $full | ForEach-Object { if ($_ -match '^\s*([A-Z][A-Z0-9_]*)\s*=\s*(.*)$') { [ordered]@{name=$Matches[1]; populated=([bool]$Matches[2].Trim())} } })
++        $report.environment_files += @{ file=$file; variables=$names }
++    }
++}
++$report.repository_migrations = @(Get-ChildItem (Join-Path $script:RepoRoot 'supabase/migrations/*.sql') | ForEach-Object { @{ name=$_.Name; sha256=(Get-FileHash $_.FullName -Algorithm SHA256).Hash } })
++$report.supabase_config_present = Test-Path (Join-Path $script:RepoRoot 'supabase/config.toml')
++try {
++    Assert-LocalDocker
++    $report.docker_version = Invoke-Docker -DockerArgs @('version','--format','{{json .}}') | ConvertFrom-Json
++    $report.compose_version = Invoke-Docker -DockerArgs @('compose','version','--short')
++    $report.context = Invoke-Docker -DockerArgs @('context','show')
++    $report.containers = @(Invoke-Docker -DockerArgs @('ps','-a','--format','{{json .}}') | ForEach-Object { $_ | ConvertFrom-Json })
++    $report.networks = @(Invoke-Docker -DockerArgs @('network','ls','--format','{{json .}}') | ForEach-Object { $_ | ConvertFrom-Json })
++    $report.volumes = @(Invoke-Docker -DockerArgs @('volume','ls','--format','{{json .}}') | ForEach-Object { $_ | ConvertFrom-Json })
++    $report.container_mounts = @()
++    foreach ($c in $report.containers) {
++        # Never dump Config.Env: it contains database passwords and JWT secrets.
++        $mounts = @(Invoke-Docker -DockerArgs @('inspect',$c.ID,'--format','{{json .Mounts}}') | ConvertFrom-Json)
++        $networks = Invoke-Docker -DockerArgs @('inspect',$c.ID,'--format','{{json .NetworkSettings.Networks}}') | ConvertFrom-Json
++        $report.container_mounts += @{name=$c.Names; mounts=$mounts; networks=$networks; status=$c.Status}
++    }
++    $candidates = @($report.containers | Where-Object { $_.Names -like 'supabase_db_*' -and $_.State -eq 'running' })
++    if (-not $DbContainer -and $candidates.Count -eq 1) { $DbContainer = $candidates[0].Names }
++    if ($DbContainer) {
++        if (-not @($report.containers | Where-Object { $_.Names -eq $DbContainer -and $_.State -eq 'running' }).Count) { throw 'The selected DB container is not running.' }
++        $sql = @'
++BEGIN READ ONLY;
++SELECT json_build_object('postgres_version',current_setting('server_version'),'database_bytes',pg_database_size(current_database()));
++SELECT json_build_object('auth_users',(SELECT count(*) FROM auth.users),'storage_buckets',(SELECT count(*) FROM storage.buckets),'storage_objects',(SELECT count(*) FROM storage.objects));
++SELECT json_build_object('migration_table',to_regclass('supabase_migrations.schema_migrations')::text);
++SELECT json_build_object('schema',schemaname,'table',relname,'estimated_rows',n_live_tup) FROM pg_stat_user_tables WHERE schemaname IN ('public','auth','storage') ORDER BY schemaname,relname;
++COMMIT;
++'@
++        $report.database = Invoke-Docker -DockerArgs @('exec',$DbContainer,'psql','-X','-U','postgres','-d','postgres','-v','ON_ERROR_STOP=1','-At','-c',$sql)
++        $exists = (Invoke-Docker -DockerArgs @('exec',$DbContainer,'psql','-X','-U','postgres','-d','postgres','-At','-c',"SELECT to_regclass('supabase_migrations.schema_migrations') IS NOT NULL") | Out-String).Trim()
++        if ($exists -eq 't') {
++            $report.applied_migrations = @(Invoke-Docker -DockerArgs @('exec',$DbContainer,'psql','-X','-U','postgres','-d','postgres','-At','-c','BEGIN READ ONLY; SELECT version FROM supabase_migrations.schema_migrations ORDER BY version; COMMIT;') | Where-Object { $_ -notin @('BEGIN','COMMIT') })
++            $report.repository_versions_not_in_history = @($report.repository_migrations | Where-Object { ($_.name.Split('_')[0]) -notin $report.applied_migrations } | ForEach-Object { $_.name })
++            $report.migration_note = 'Version comparison only; does not establish SQL checksum equivalence. Never apply missing versions blindly.'
++        } else { $report.migration_note = 'No migration history. Existing schema must be reviewed; do not replay schema.sql or migrations.' }
++        $report.db_container = $DbContainer
++    } else { $report.database = 'NOT_INSPECTED: rerun with -DbContainer using the exact container name. No automatic selection across multiple projects.' }
++    if (Get-Command Get-NetTCPConnection -ErrorAction SilentlyContinue) {
++        $report.listening_ports = @(Get-NetTCPConnection -State Listen | Select-Object LocalAddress,LocalPort,OwningProcess)
++    }
++    $report.storage_note = 'Counts are metadata only. Check actual object reads in browser; this report is not a backup or restore verification.'
++} catch { $report.blocked = $_.Exception.Message }
++$target = Join-Path $reportDir ('local-audit-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.json')
++$report | ConvertTo-Json -Depth 15 | Set-Content -Encoding UTF8 $target
++Write-Host "Read-only audit saved: $target"
++if ($report.Contains('blocked')) { Write-Warning $report.blocked }
++Write-Host 'Review locally before sharing: the report contains container paths and machine metadata, but no environment values or user rows.'
+diff --git a/infra/scripts/Start-Local.ps1 b/infra/scripts/Start-Local.ps1
+new file mode 100644
+index 0000000..3962120
+--- /dev/null
++++ b/infra/scripts/Start-Local.ps1
+@@ -0,0 +1,14 @@
++[CmdletBinding()]
++param()
++. (Join-Path $PSScriptRoot 'Common.ps1')
++Assert-LocalDocker
++& node (Join-Path $script:RepoRoot 'infra/configure.mjs') --check
++if ($LASTEXITCODE -ne 0) { throw 'Configuration validation failed.' }
++$composeArgs = Get-ComposeArgs
++# Quiet validation prevents resolved secrets appearing on screen.
++Invoke-Docker -DockerArgs ($composeArgs + @('config','--quiet')) | Out-Null
++Invoke-Docker -DockerArgs ($composeArgs + @('build','web'))
++# Probe connectivity BEFORE replacing any existing app container.
++Invoke-Docker -DockerArgs ($composeArgs + @('run','--rm','--no-deps','web','node','infra/check-runtime.mjs'))
++Invoke-Docker -DockerArgs ($composeArgs + @('up','-d','--no-deps','--wait','--wait-timeout','120','web'))
++& (Join-Path $PSScriptRoot 'Test-Local.ps1')
+diff --git a/infra/scripts/Stop-Local.ps1 b/infra/scripts/Stop-Local.ps1
+new file mode 100644
+index 0000000..c6ecf5b
+--- /dev/null
++++ b/infra/scripts/Stop-Local.ps1
+@@ -0,0 +1,6 @@
++[CmdletBinding()]
++param()
++. (Join-Path $PSScriptRoot 'Common.ps1')
++Assert-LocalDocker
++Invoke-Docker -DockerArgs ((Get-ComposeArgs) + @('stop','web'))
++Write-Host 'Stopped only edu-local-web/web. Supabase containers and volumes untouched.'
+diff --git a/infra/scripts/Test-Local.ps1 b/infra/scripts/Test-Local.ps1
+new file mode 100644
+index 0000000..cdb8bef
+--- /dev/null
++++ b/infra/scripts/Test-Local.ps1
+@@ -0,0 +1,15 @@
++[CmdletBinding()]
++param()
++. (Join-Path $PSScriptRoot 'Common.ps1')
++Assert-LocalDocker
++$composeArgs = Get-ComposeArgs
++Invoke-Docker -DockerArgs ($composeArgs + @('exec','-T','web','node','infra/check-runtime.mjs'))
++$line = Get-Content (Join-Path $script:RepoRoot 'infra/.env.compose') | Where-Object { $_ -like 'NEXT_PUBLIC_SITE_URL=*' }
++$base = $line.Substring('NEXT_PUBLIC_SITE_URL='.Length).TrimEnd('/')
++foreach ($route in @('/','/search?q=deployment','/admin/login')) {
++    $response = Invoke-WebRequest -UseBasicParsing -Uri ($base + $route) -TimeoutSec 30
++    if ($response.StatusCode -ne 200) { throw "HTTP smoke failed: $route" }
++    Write-Host "PASS $route"
++}
++Write-Host "Local URL: $base"
++Write-Host 'Complete the manual Auth/Storage/quiz lifecycle checklist in DEPLOYMENT_TASKS.md. Automated probes did not create data.'
+diff --git a/lib/supabase/admin.ts b/lib/supabase/admin.ts
+index 22575f4..197196d 100644
+--- a/lib/supabase/admin.ts
++++ b/lib/supabase/admin.ts
+@@ -1,3 +1,4 @@
++import { supabaseTransport } from "@/lib/supabase/transport";
+ import "server-only";
+ import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+ import { supabaseConfig } from "@/lib/config";
+@@ -9,6 +10,7 @@ export function createServiceClient() {
+   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+   if (!serviceRoleKey) throw new Error("Thiếu SUPABASE_SERVICE_ROLE_KEY cho tác vụ máy chủ.");
+   return createSupabaseClient<Database>(url, serviceRoleKey, {
++    global: { fetch: supabaseTransport(url) },
+     auth: { autoRefreshToken: false, persistSession: false }
+   });
+ }
+diff --git a/lib/supabase/server.ts b/lib/supabase/server.ts
+index 40505a3..ce2c4bf 100644
+--- a/lib/supabase/server.ts
++++ b/lib/supabase/server.ts
+@@ -1,3 +1,4 @@
++import { supabaseTransport } from "@/lib/supabase/transport";
+ import "server-only";
+ import {authCookieOptions} from "@/lib/security/config";
+ import { createServerClient, type SetAllCookies } from "@supabase/ssr";
+@@ -14,5 +15,5 @@ export async function createClient() {
+       // Server Components cannot write cookies. proxy.ts refreshes them before rendering.
+     }
+   };
+-  return createServerClient<Database>(url, key, { cookieOptions:authCookieOptions(), cookies: { getAll: () => cookieStore.getAll(), setAll } });
++  return createServerClient<Database>(url, key, { global: { fetch: supabaseTransport(url) }, cookieOptions:authCookieOptions(), cookies: { getAll: () => cookieStore.getAll(), setAll } });
+ }
+diff --git a/lib/supabase/transport.ts b/lib/supabase/transport.ts
+new file mode 100644
+index 0000000..8a090f3
+--- /dev/null
++++ b/lib/supabase/transport.ts
+@@ -0,0 +1,22 @@
++/** Server transport only: preserve public Storage URLs and the Auth cookie key.
++ * Replacing the SDK's base URL would change both of those. Never import in client components.
++ */
++export function supabaseTransport(publicUrl: string, internalUrl = process.env.SUPABASE_INTERNAL_URL, transport: typeof fetch = fetch): typeof fetch {
++  if (!internalUrl) return transport;
++  const source = new URL(publicUrl);
++  const target = new URL(internalUrl);
++  for (const url of [source, target]) {
++    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.pathname !== '/' || url.search || url.hash)
++      throw new Error('Supabase transport requires HTTP(S) origins without credentials or paths.');
++  }
++  return async (input, init) => {
++    const original = input instanceof Request ? input.url : String(input);
++    const url = new URL(original);
++    if (url.origin !== source.origin) return transport(input, init);
++    url.protocol = target.protocol;
++    url.host = target.host;
++    const request = input instanceof Request ? new Request(url, input) : url;
++    // Do not forward privileged headers to a redirect destination.
++    return transport(request, { ...init, redirect: 'error' });
++  };
++}
+diff --git a/next.config.ts b/next.config.ts
+index 16cba67..b24a480 100644
+--- a/next.config.ts
++++ b/next.config.ts
+@@ -6,6 +6,7 @@ assertPublicKey(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
+ if (process.env.NEXT_PUBLIC_SITE_URL)
+   configuredOrigin(process.env.NEXT_PUBLIC_SITE_URL);
+ const nextConfig: NextConfig = {
++  output: "standalone",
+   poweredByHeader: false,
+   productionBrowserSourceMaps: false,
+   experimental: { serverActions: { bodySizeLimit: "11mb" } },
+diff --git a/proxy.ts b/proxy.ts
+index 66cb0e9..ad1936b 100644
+--- a/proxy.ts
++++ b/proxy.ts
+@@ -1,3 +1,4 @@
++import { supabaseTransport } from "@/lib/supabase/transport";
+ import { createServerClient, type SetAllCookies } from "@supabase/ssr";
+ import { NextResponse, type NextRequest } from "next/server";
+ import { hasSupabaseConfig, supabaseConfig } from "@/lib/config";
+@@ -46,6 +47,7 @@ export async function proxy(request: NextRequest) {
+     };
+     const { url, key } = supabaseConfig();
+     const client = createServerClient<Database>(url, key, {
++      global: { fetch: supabaseTransport(url) },
+       cookieOptions,
+       cookies: { getAll: () => request.cookies.getAll(), setAll },
+     });
+diff --git a/tests/deployment-transport.test.ts b/tests/deployment-transport.test.ts
+new file mode 100644
+index 0000000..e6da120
+--- /dev/null
++++ b/tests/deployment-transport.test.ts
+@@ -0,0 +1,30 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import { createClient } from '@supabase/supabase-js';
++import { supabaseTransport } from '../lib/supabase/transport';
++
++test('Docker transport preserves method, body, headers, query and public Storage URL', async () => {
++  const requests: Request[] = [];
++  const fake: typeof fetch = async (input, init) => {
++    requests.push(new Request(input, init));
++    return new Response('{}', { headers: { 'content-type': 'application/json' } });
++  };
++  const transport = supabaseTransport('http://127.0.0.1:54321', 'http://host.docker.internal:54321', fake);
++  await transport(new Request('http://127.0.0.1:54321/rest/v1/rpc/example?a=1', { method: 'POST', headers: { apikey: 'test-key' }, body: '{"test":true}' }));
++  assert.equal(requests[0].url, 'http://host.docker.internal:54321/rest/v1/rpc/example?a=1');
++  assert.equal(requests[0].method, 'POST');
++  assert.equal(requests[0].headers.get('apikey'), 'test-key');
++  assert.equal(await requests[0].text(), '{"test":true}');
++  assert.equal(requests[0].redirect, 'error');
++  const client = createClient('http://127.0.0.1:54321', 'public-key', { global: { fetch: transport }, auth: { persistSession: false } });
++  assert.equal(client.storage.from('site-assets').getPublicUrl('photo.webp').data.publicUrl, 'http://127.0.0.1:54321/storage/v1/object/public/site-assets/photo.webp');
++});
++test('Docker transport leaves unrelated URLs alone and rejects ambiguous origins', async () => {
++  let result = '';
++  const fake: typeof fetch = async input => { result = String(input); return new Response(); };
++  assert.equal(supabaseTransport('http://localhost:54321', '', fake), fake);
++  await supabaseTransport('http://localhost:54321', 'http://host.docker.internal:54321', fake)('https://example.com/test');
++  assert.equal(result, 'https://example.com/test');
++  for (const invalid of ['file:///tmp/test', 'http://user:password@host', 'http://host/path', 'http://host?x=1'])
++    assert.throws(() => supabaseTransport('http://localhost:54321', invalid, fake));
++});

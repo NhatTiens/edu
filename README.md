@@ -156,3 +156,7 @@ Viewport chính xác: 375×812, 768×1024, 1440×900. Lifecycle tạo dữ liệ
 Migration mới: nếu database đã có 0011, chỉ áp dụng `supabase/migrations/0012_final_qa.sql` trước khi chạy bản app này. Nó thêm dashboard RPC, cài đặt `site.presentation`, RPC save có revision và bucket `site-assets`. Admin dashboard dùng dữ liệu thật, thống kê 7 ngày theo Asia/Ho_Chi_Minh. Settings lưu branding, Facebook/Zalo, SEO và ảnh vào database; logo/social image đi qua cùng bộ giải mã và chuyển WebP như thumbnail. Header và metadata đọc cấu hình đã lưu. Không chạy lại `schema.sql` trên database đang sử dụng.
 
 Local QA không thay thế Supabase Auth/PostgREST/Storage thật hoặc cạnh tranh giữa nhiều connection PostgreSQL. Chưa có credential để chạy những bước đó trong workspace. Xem `IMPLEMENTATION_STATUS.md`, `TASKS.md` và `SECURITY.md` trước khi release.
+
+## Docker local trước VPS
+
+Cấu hình deployment nằm trong `infra/`, hướng dẫn PowerShell ở `infra/README.md`, trạng thái và điều kiện chuyển VPS ở `DEPLOYMENT_TASKS.md`. Compose chỉ chạy web và kết nối tới Supabase local hiện hữu; không reset, seed hoặc tự áp dụng migration.

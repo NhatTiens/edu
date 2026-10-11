@@ -6,6 +6,7 @@ assertPublicKey(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
 if (process.env.NEXT_PUBLIC_SITE_URL)
   configuredOrigin(process.env.NEXT_PUBLIC_SITE_URL);
 const nextConfig: NextConfig = {
+  output: "standalone",
   poweredByHeader: false,
   productionBrowserSourceMaps: false,
   experimental: { serverActions: { bodySizeLimit: "11mb" } },

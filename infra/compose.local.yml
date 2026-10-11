@@ -1,0 +1,34 @@
+# App-only deployment. Supabase containers/networks/volumes stay untouched.
+name: edu-local-web
+services:
+  web:
+    image: edu-local-web:${EDU_IMAGE_TAG:-local}
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:?Initialize deployment first}
+        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:-}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:?Initialize deployment first}
+    env_file:
+      - path: .env.runtime
+        format: raw
+    environment:
+      NODE_ENV: production
+      APP_DATA_MODE: supabase
+      HOSTNAME: 0.0.0.0
+      PORT: '3000'
+    ports:
+      - '127.0.0.1:${EDU_HTTP_PORT:-3000}:3000'
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    init: true
+    restart: unless-stopped
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'

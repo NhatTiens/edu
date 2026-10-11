@@ -1,3 +1,4 @@
+import { supabaseTransport } from "@/lib/supabase/transport";
 import { createServerClient, type SetAllCookies } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { hasSupabaseConfig, supabaseConfig } from "@/lib/config";
@@ -46,6 +47,7 @@ export async function proxy(request: NextRequest) {
     };
     const { url, key } = supabaseConfig();
     const client = createServerClient<Database>(url, key, {
+      global: { fetch: supabaseTransport(url) },
       cookieOptions,
       cookies: { getAll: () => request.cookies.getAll(), setAll },
     });

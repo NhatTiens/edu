@@ -1,0 +1,12 @@
+.git
+node_modules
+.next
+.env*
+**/.env*
+infra/reports
+infra/backups
+artifacts
+coverage
+*.patch
+*.zip
+*.tsbuildinfo

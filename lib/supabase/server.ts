@@ -1,3 +1,4 @@
+import { supabaseTransport } from "@/lib/supabase/transport";
 import "server-only";
 import {authCookieOptions} from "@/lib/security/config";
 import { createServerClient, type SetAllCookies } from "@supabase/ssr";
@@ -14,5 +15,5 @@ export async function createClient() {
       // Server Components cannot write cookies. proxy.ts refreshes them before rendering.
     }
   };
-  return createServerClient<Database>(url, key, { cookieOptions:authCookieOptions(), cookies: { getAll: () => cookieStore.getAll(), setAll } });
+  return createServerClient<Database>(url, key, { global: { fetch: supabaseTransport(url) }, cookieOptions:authCookieOptions(), cookies: { getAll: () => cookieStore.getAll(), setAll } });
 }
