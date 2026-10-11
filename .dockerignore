@@ -10,3 +10,10 @@ coverage
 *.patch
 *.zip
 *.tsbuildinfo
+
+supabase/.temp
+supabase/.branches
+infra/build-public.json
+*.pem
+*.key
+*.dump

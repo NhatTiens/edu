@@ -5,8 +5,9 @@ services:
     image: edu-local-web:${EDU_IMAGE_TAG:-local}
     build:
       context: ..
-      dockerfile: infra/Dockerfile
+      dockerfile: Dockerfile
       args:
+        DEPLOYMENT_TARGET: local
         NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:?Initialize deployment first}
         NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:-}
         NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
@@ -15,6 +16,7 @@ services:
       - path: .env.runtime
         format: raw
     environment:
+      DEPLOYMENT_TARGET: local
       NODE_ENV: production
       APP_DATA_MODE: supabase
       HOSTNAME: 0.0.0.0

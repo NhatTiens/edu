@@ -1,0 +1,424 @@
+diff --git a/.dockerignore b/.dockerignore
+index 92698c6..9fb79ae 100644
+--- a/.dockerignore
++++ b/.dockerignore
+@@ -10,3 +10,10 @@ coverage
+ *.patch
+ *.zip
+ *.tsbuildinfo
++
++supabase/.temp
++supabase/.branches
++infra/build-public.json
++*.pem
++*.key
++*.dump
+diff --git a/.gitignore b/.gitignore
+index 1794e58..f35bcd5 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -8,3 +8,5 @@ coverage/
+ # Local deployment evidence and backups can contain machine metadata / private data.
+ infra/reports/
+ infra/backups/
++
++infra/build-public.json
+diff --git a/DEPLOYMENT_TASKS.md b/DEPLOYMENT_TASKS.md
+index c6a1149..0c8ad35 100644
+--- a/DEPLOYMENT_TASKS.md
++++ b/DEPLOYMENT_TASKS.md
+@@ -57,3 +57,19 @@ Kiểm tra cấu hình trong thư mục tạm: PASS với secret chứa `$` và
+ Compose 2.30.3 `config --quiet`: PASS với môi trường giả tạm thời, không dùng Docker daemon. Audit PowerShell cũng đã chạy qua nhánh đầy đủ bằng mock Docker (container discovery, metadata, truy vấn chỉ đọc và đối chiếu version migration): PASS. Đây là kiểm tra script/config, không phải bằng chứng container Windows hoặc dữ liệu Supabase thật đang hoạt động.
+ 
+ GitHub write integration trả HTTP 403 khi tạo tree; chưa tạo remote branch/PR và không có thay đổi trên GitHub. Bàn giao bằng patch dựa trên baseline b1e0d74; chạy `git apply --check` trước khi áp dụng vào checkout của người dùng. Không bypass quyền truy cập bằng phương thức khác.
++
++## Bổ sung Docker runtime lần 2 — 11/10/2026
++
++Tiếp tục từ patch local đã bàn giao, không làm lại sản phẩm. Theo log Windows do người dùng gửi, Docker Engine 29.5.3, Compose 5.1.4 và Linux/WSL2 đã chạy; ban đầu không có Supabase container/config hoặc .env.local. Sau đó người dùng báo đã chạy xong khởi tạo Supabase. Work chưa có log xác nhận migration/seed/start cuối cùng, chưa truy cập được credentials hoặc Docker daemon của Windows.
++
++Dockerfile được chuyển từ infra/Dockerfile ra root, stages đổi đúng deps/builder/runner, Node 22 bookworm slim. Runtime dùng standalone traced files, chạy user node, không npm install ở runner, không next dev; stdout/stderr giữ trực tiếp, Compose dùng init và restart unless-stopped. Giữ nguyên experimental serverActions 11mb và giao diện. Không sửa migration, seed hoặc dữ liệu.
++
++Thêm health API live (liveness) và ready (read-only Supabase SSR client, timeout 5 giây). Docker healthcheck chỉ dùng live để không đánh đồng DB outage với process chết. Live smoke kiểm tra ready, trang SSR, error boundary và CSS/JS với MIME đúng. Không có endpoint hoặc probe ghi dữ liệu trong các kiểm tra deployment mới.
++
++Browser Supabase client giữ nguyên public URL; server clients/proxy tiếp tục dùng transport nội bộ đã test ở patch trước, không làm thay đổi public Storage URL hoặc Auth cookie name. Container entrypoint bắt buộc internal URL khác loopback. Manifest public được tạo lúc build, runtime phải khớp chính xác URL/key/site URL và target; mismatches bị từ chối với hướng dẫn rebuild. Manifest và build args không chứa service key/session secret; .dockerignore bổ sung secret files và Supabase temporary state.
++
++Có Compose/template environment riêng cho VPS. Target VPS bắt buộc public HTTPS origins, không chấp nhận localhost, dùng external Supabase network hiện hữu. Không sao chép image local lên VPS. Các bước build lại, probe, up và smoke nằm trong infra/README.md; chưa deploy hoặc migrate VPS.
++
++Kết quả: typecheck PASS, lint PASS, 34/34 tests PASS, production standalone build PASS. Standalone kiểm tra live 200, readiness thiếu DB trả 503 không tiết lộ lỗi, login 200 và 11 static CSS/JS assets 200. Compose local/VPS config validation PASS bằng Compose 2.30.3, PowerShell script parser PASS. Không dùng mock database để khẳng định homepage hoặc Supabase thật hoạt động; unit/database suite có fixtures biệt lập như trước và không thay dữ liệu ứng dụng.
++
++Docker image build và container run trong Work: BLOCKED, `docker version` trả command not found (127), không có socket/remote context tới Windows. Homepage/Server Components với dữ liệu Supabase thật, Supabase server connection trong container và quiz API nghiệp vụ: CHƯA XÁC MINH trong lượt này. Chạy infra/scripts/Start-Local.ps1 trên Windows để build image, probe, khởi chạy container và smoke thật. Chỉ đánh dấu acceptance sau khi log các bước đó PASS; không reset DB khi có lỗi.
+diff --git a/infra/Dockerfile b/Dockerfile
+similarity index 55%
+rename from infra/Dockerfile
+rename to Dockerfile
+index 7cc53c1..41896a7 100644
+--- a/infra/Dockerfile
++++ b/Dockerfile
+@@ -1,18 +1,19 @@
+ # syntax=docker/dockerfile:1
+-FROM node:22-bookworm-slim AS dependencies
++FROM node:22-bookworm-slim AS deps
+ WORKDIR /app
+ COPY package.json package-lock.json ./
+ RUN npm ci --no-audit --no-fund
+ 
+-FROM dependencies AS builder
++FROM deps AS builder
+ COPY . .
++ARG DEPLOYMENT_TARGET=local
+ ARG NEXT_PUBLIC_SUPABASE_URL
+ ARG NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+ ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
+ ARG NEXT_PUBLIC_SITE_URL
+ ENV NEXT_TELEMETRY_DISABLED=1
+ # No service key or session secret is supplied during image construction.
+-RUN npm run typecheck && npm run lint && npm run build && mkdir -p public
++RUN node infra/image-config.mjs write && npm run typecheck && npm run lint && npm run build && mkdir -p public
+ 
+ FROM node:22-bookworm-slim AS runner
+ WORKDIR /app
+@@ -20,8 +21,9 @@ ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 HOSTNAME=0.0.0.0 PORT=3000
+ COPY --from=builder --chown=node:node /app/.next/standalone ./
+ COPY --from=builder --chown=node:node /app/.next/static ./.next/static
+ COPY --from=builder --chown=node:node /app/public ./public
+-COPY --chown=node:node infra/check-runtime.mjs ./infra/check-runtime.mjs
++COPY --chown=node:node infra/check-runtime.mjs infra/image-config.mjs infra/entrypoint.mjs infra/smoke-live.mjs ./infra/
++COPY --from=builder --chown=node:node /app/infra/build-public.json ./infra/build-public.json
+ USER node
+ EXPOSE 3000
+-HEALTHCHECK --interval=20s --timeout=5s --start-period=30s --retries=3 CMD node -e "fetch('http://127.0.0.1:3000/admin/login',{redirect:'manual'}).then(r=>process.exit(r.status===200?0:1)).catch(()=>process.exit(1))"
+-CMD ["node", "server.js"]
++HEALTHCHECK --interval=20s --timeout=5s --start-period=30s --retries=3 CMD node -e "fetch('http://127.0.0.1:3000/api/health/live',{redirect:'manual'}).then(r=>process.exit(r.status===200?0:1)).catch(()=>process.exit(1))"
++CMD ["node", "infra/entrypoint.mjs"]
+diff --git a/app/api/health/live/route.ts b/app/api/health/live/route.ts
+new file mode 100644
+index 0000000..7c7f3f0
+--- /dev/null
++++ b/app/api/health/live/route.ts
+@@ -0,0 +1,4 @@
++export const dynamic = 'force-dynamic';
++export function GET() {
++  return Response.json({ status: 'ok' }, { headers: { 'Cache-Control': 'no-store' } });
++}
+diff --git a/app/api/health/ready/route.ts b/app/api/health/ready/route.ts
+new file mode 100644
+index 0000000..2198430
+--- /dev/null
++++ b/app/api/health/ready/route.ts
+@@ -0,0 +1,15 @@
++import { createClient } from '@/lib/supabase/server';
++export const dynamic = 'force-dynamic';
++export const runtime = 'nodejs';
++/** Bounded read through the same SSR client used by Server Components. No PII. */
++export async function GET() {
++  const headers = { 'Cache-Control': 'no-store' };
++  try {
++    const client = await createClient();
++    const { error } = await client.from('courses').select('id').eq('status', 'published').limit(1).abortSignal(AbortSignal.timeout(5000));
++    if (error) throw error;
++    return Response.json({ status: 'ready' }, { headers });
++  } catch {
++    return Response.json({ status: 'unavailable' }, { status: 503, headers });
++  }
++}
+diff --git a/infra/README.md b/infra/README.md
+index 3536a59..5f3be6a 100644
+--- a/infra/README.md
++++ b/infra/README.md
+@@ -63,3 +63,25 @@ Next.js: https://nextjs.org/docs/app/guides/self-hosting
+ Docker: https://docs.docker.com/guides/nextjs/
+ 
+ Docker Desktop: https://docs.docker.com/desktop/features/networking/networking-how-tos/
++
++## Image contract và healthcheck bổ sung
++
++Dockerfile chính nằm tại root, stages là deps, builder, runner; Compose đã trỏ tới file mới. Next experimental serverActions bodySizeLimit được giữ nguyên. Runtime chỉ copy standalone traced dependencies và static assets, không copy node_modules của deps/builder. Node chạy non-root và ghi log trực tiếp stdout/stderr. `restart: unless-stopped` xử lý process exit; Docker healthcheck báo unhealthy nhưng bản thân nó không tự restart container còn sống.
++
++`GET /api/health/live` kiểm tra Next API đang phục vụ, không phụ thuộc database. `GET /api/health/ready` dùng đúng server Supabase client, đọc tối đa một course ID, timeout 5 giây, trả 503 khi thiếu cấu hình/kết nối/quyền; response không chứa dữ liệu bản ghi hoặc chi tiết lỗi. Script smoke đọc các endpoint này, homepage/search/login và tải từng asset CSS/JS được tham chiếu trong homepage. Nó không submit quiz, thay database hoặc cấp quyền admin.
++
++Docker builder ghi manifest gồm cấu hình public đã được dùng lúc build. Entrypoint đối chiếu manifest với runtime environment, yêu cầu internal URL không phải loopback và kiểm tra có server secrets; nếu khác public URL/key/site URL hoặc target local/VPS thì container từ chối khởi động. Manifest không chứa service key hay session secret. Chạy `docker compose restart` không cập nhật bundle hay environment: phải build rồi up lại bằng đúng file cấu hình.
++
++## Build riêng cho VPS khi đã đủ điều kiện cutover
++
++Không dùng image local cho VPS. Chuẩn bị hai file riêng từ `infra/vps.build.env.example` và `infra/vps.runtime.env.example`, lưu thành `infra/.env.vps.compose` và `infra/.env.vps.runtime`. Điền cùng bộ NEXT_PUBLIC_* thật trong cả hai. Public origins của target VPS bắt buộc HTTPS và không được loopback. SUPABASE_DOCKER_NETWORK phải là network của gateway Supabase self-hosted hiện hữu; SUPABASE_INTERNAL_URL dùng đúng DNS gateway/container port trên network đó, không dùng địa chỉ PostgreSQL. Template không tạo hoặc thay đổi Supabase, backup, reverse proxy hay TLS.
++
++```bash
++docker compose --env-file infra/.env.vps.compose -f infra/compose.vps.yml config --quiet
++docker compose --env-file infra/.env.vps.compose -f infra/compose.vps.yml build web
++docker compose --env-file infra/.env.vps.compose -f infra/compose.vps.yml run --rm --no-deps web node infra/check-runtime.mjs
++docker compose --env-file infra/.env.vps.compose -f infra/compose.vps.yml up -d --no-deps --wait --wait-timeout 120 web
++docker compose --env-file infra/.env.vps.compose -f infra/compose.vps.yml exec -T web node infra/smoke-live.mjs
++```
++
++Các lệnh trên chỉ dành cho VPS đã có stack và backup/restore kiểm chứng. Gateway network là external nên Compose không tạo/xóa network đó. Web bind loopback để reverse proxy trên host phục vụ HTTPS. Nếu proxy là container, cần thiết kế thêm network cho proxy trước. Test URL HTTPS bên ngoài, login/refresh, upload và quiz thật sau khi bật proxy; smoke trong container không xác minh TLS/domain.
+diff --git a/infra/compose.local.yml b/infra/compose.local.yml
+index 98edc41..3afbadd 100644
+--- a/infra/compose.local.yml
++++ b/infra/compose.local.yml
+@@ -5,8 +5,9 @@ services:
+     image: edu-local-web:${EDU_IMAGE_TAG:-local}
+     build:
+       context: ..
+-      dockerfile: infra/Dockerfile
++      dockerfile: Dockerfile
+       args:
++        DEPLOYMENT_TARGET: local
+         NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:?Initialize deployment first}
+         NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:-}
+         NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
+@@ -15,6 +16,7 @@ services:
+       - path: .env.runtime
+         format: raw
+     environment:
++      DEPLOYMENT_TARGET: local
+       NODE_ENV: production
+       APP_DATA_MODE: supabase
+       HOSTNAME: 0.0.0.0
+diff --git a/infra/compose.vps.yml b/infra/compose.vps.yml
+new file mode 100644
+index 0000000..cd6eeca
+--- /dev/null
++++ b/infra/compose.vps.yml
+@@ -0,0 +1,40 @@
++# App-only VPS template. Requires an existing Supabase gateway network and host reverse proxy.
++name: edu-vps-web
++services:
++  web:
++    image: edu-vps-web:${EDU_IMAGE_TAG:?Set a versioned image tag}
++    build:
++      context: ..
++      dockerfile: Dockerfile
++      args:
++        DEPLOYMENT_TARGET: vps
++        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:?Initialize deployment first}
++        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:-}
++        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
++        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:?Initialize deployment first}
++    env_file:
++      - path: .env.vps.runtime
++        format: raw
++    environment:
++      DEPLOYMENT_TARGET: vps
++      NODE_ENV: production
++      APP_DATA_MODE: supabase
++      HOSTNAME: 0.0.0.0
++      PORT: '3000'
++    ports:
++      - '127.0.0.1:${EDU_HTTP_PORT:-3000}:3000'
++    networks: [supabase]
++    init: true
++    restart: unless-stopped
++    cap_drop: [ALL]
++    security_opt: [no-new-privileges:true]
++    logging:
++      driver: json-file
++      options:
++        max-size: '10m'
++        max-file: '3'
++
++networks:
++  supabase:
++    external: true
++    name: ${SUPABASE_DOCKER_NETWORK:?Set the existing Supabase network name}
+diff --git a/infra/configure.mjs b/infra/configure.mjs
+index 5c6dc9a..327294d 100644
+--- a/infra/configure.mjs
++++ b/infra/configure.mjs
+@@ -70,4 +70,4 @@ try {
+     fs.writeFileSync(destinations[1],serialize(runtime),{flag:'wx',mode:0o600});
+     console.log('Created private deployment environment. Existing source environment and secrets unchanged.');
+   }
+-} catch (error) { console.error(error instanceof Error && error.code ? 'Cannot access deployment configuration files.' : error.message); process.exitCode=1; }
++} catch (error) { console.error(error instanceof Error && error.code ? `Deployment configuration error (${error.code}). Check that the source .env.local exists and is readable; ERR_INVALID_URL means a URL is malformed.` : error.message); process.exitCode=1; }
+diff --git a/infra/entrypoint.mjs b/infra/entrypoint.mjs
+new file mode 100644
+index 0000000..e7e4d17
+--- /dev/null
++++ b/infra/entrypoint.mjs
+@@ -0,0 +1,10 @@
++import fs from 'node:fs';
++import { verifyRuntime } from './image-config.mjs';
++try {
++  verifyRuntime(process.env, JSON.parse(fs.readFileSync(new URL('./build-public.json', import.meta.url), 'utf8')));
++} catch (error) {
++  console.error(`Deployment startup refused: ${error.message}`);
++  process.exit(1);
++}
++// Same process as Next.js: signals and stdout/stderr remain attached to Docker.
++await import('../server.js');
+diff --git a/infra/image-config.d.mts b/infra/image-config.d.mts
+new file mode 100644
+index 0000000..7530567
+--- /dev/null
++++ b/infra/image-config.d.mts
+@@ -0,0 +1,3 @@
++export const publicNames: string[];
++export function publicConfig(env: Record<string, string | undefined>): Record<string, string>;
++export function verifyRuntime(env: Record<string, string | undefined>, built: Record<string, string>): void;
+diff --git a/infra/image-config.mjs b/infra/image-config.mjs
+new file mode 100644
+index 0000000..662187f
+--- /dev/null
++++ b/infra/image-config.mjs
+@@ -0,0 +1,41 @@
++import fs from 'node:fs';
++import { fileURLToPath } from 'node:url';
++import path from 'node:path';
++export const publicNames = ['NEXT_PUBLIC_SUPABASE_URL','NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY','NEXT_PUBLIC_SUPABASE_ANON_KEY','NEXT_PUBLIC_SITE_URL'];
++const manifest = new URL('./build-public.json', import.meta.url);
++export function publicConfig(env) {
++  const result = Object.fromEntries(publicNames.map(name=>[name, env[name] || '']));
++  for (const name of ['NEXT_PUBLIC_SUPABASE_URL','NEXT_PUBLIC_SITE_URL']) {
++    let url;
++    try { url = new URL(result[name]); } catch { throw new Error(`Missing or invalid ${name}`); }
++    const loopback = ['localhost','127.0.0.1','[::1]'].includes(url.hostname);
++    if (env.DEPLOYMENT_TARGET === 'vps' && (loopback || url.protocol !== 'https:')) throw new Error(`${name} must be a public HTTPS origin for VPS.`);
++    if (url.username || url.password || url.pathname !== '/' || url.hash || url.search || !(url.protocol === 'https:' || (loopback && url.protocol === 'http:')))
++      throw new Error(`${name} must be an HTTPS origin or HTTP loopback for local use.`);
++  }
++  if (!result.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY && !result.NEXT_PUBLIC_SUPABASE_ANON_KEY) throw new Error('Missing public Supabase key at build time.');
++  for (const name of publicNames.filter(name=>name.endsWith('_KEY'))) {
++    const key=result[name];
++    let role;
++    try { role=JSON.parse(Buffer.from(key.split('.')[1],'base64url').toString()).role; } catch { /* Opaque publishable keys are supported. */ }
++    if(key.startsWith('sb_secret_') || ['service_role','supabase_admin'].includes(role)) throw new Error(`Privileged key rejected in ${name}`);
++  }
++  return result;
++}
++export function verifyRuntime(env, built) {
++  const actual = publicConfig(env);
++  if ((env.DEPLOYMENT_TARGET || 'local') !== built.deploymentTarget) throw new Error('Image target differs from runtime target. Rebuild for local/VPS.');
++  for (const name of publicNames) if (actual[name] !== built[name]) throw new Error(`Image/runtime mismatch: ${name}. Rebuild for the target environment.`);
++  if (!env.SUPABASE_SERVICE_ROLE_KEY || (env.QUIZ_SESSION_SECRET || '').length < 32) throw new Error('Missing service key or valid quiz session secret.');
++  let internal;
++  try { internal = new URL(env.SUPABASE_INTERNAL_URL); } catch { throw new Error('SUPABASE_INTERNAL_URL is required in Docker.'); }
++  if (!['http:','https:'].includes(internal.protocol) || internal.username || internal.password || internal.pathname !== '/' || internal.search || internal.hash || ['localhost','127.0.0.1','[::1]','0.0.0.0','[::]'].includes(internal.hostname))
++    throw new Error('SUPABASE_INTERNAL_URL must point to the Supabase gateway, not container loopback.');
++}
++if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
++  try {
++    if (process.argv[2] === 'write') fs.writeFileSync(manifest, JSON.stringify({ ...publicConfig(process.env), deploymentTarget: process.env.DEPLOYMENT_TARGET || 'local' }), { mode: 0o644 });
++    else if (process.argv[2] === 'check') verifyRuntime(process.env, JSON.parse(fs.readFileSync(manifest, 'utf8')));
++    else throw new Error('Use write or check.');
++  } catch (error) { console.error(error.message); process.exitCode=1; }
++}
+diff --git a/infra/scripts/Test-Local.ps1 b/infra/scripts/Test-Local.ps1
+index cdb8bef..20d206d 100644
+--- a/infra/scripts/Test-Local.ps1
++++ b/infra/scripts/Test-Local.ps1
+@@ -6,10 +6,7 @@ $composeArgs = Get-ComposeArgs
+ Invoke-Docker -DockerArgs ($composeArgs + @('exec','-T','web','node','infra/check-runtime.mjs'))
+ $line = Get-Content (Join-Path $script:RepoRoot 'infra/.env.compose') | Where-Object { $_ -like 'NEXT_PUBLIC_SITE_URL=*' }
+ $base = $line.Substring('NEXT_PUBLIC_SITE_URL='.Length).TrimEnd('/')
+-foreach ($route in @('/','/search?q=deployment','/admin/login')) {
+-    $response = Invoke-WebRequest -UseBasicParsing -Uri ($base + $route) -TimeoutSec 30
+-    if ($response.StatusCode -ne 200) { throw "HTTP smoke failed: $route" }
+-    Write-Host "PASS $route"
+-}
++& node (Join-Path $script:RepoRoot 'infra/smoke-live.mjs') $base
++if ($LASTEXITCODE -ne 0) { throw 'Live app smoke failed. Review the printed check; do not reset Supabase.' }
+ Write-Host "Local URL: $base"
+ Write-Host 'Complete the manual Auth/Storage/quiz lifecycle checklist in DEPLOYMENT_TASKS.md. Automated probes did not create data.'
+diff --git a/infra/smoke-live.mjs b/infra/smoke-live.mjs
+new file mode 100644
+index 0000000..8b5fd83
+--- /dev/null
++++ b/infra/smoke-live.mjs
+@@ -0,0 +1,31 @@
++// Read-only smoke against the real running app. No fixtures, seed, or user writes.
++const base = process.argv[2] || 'http://127.0.0.1:3000';
++async function get(route) {
++  const r = await fetch(new URL(route, base), { redirect: 'manual', signal: AbortSignal.timeout(15000) });
++  if (r.status !== 200) throw new Error(`HTTP ${r.status}: ${route}`);
++  return r;
++}
++try {
++  for (const [route, expected] of [['/api/health/live','ok'],['/api/health/ready','ready']]) {
++    const data=await (await get(route)).json();
++    if(data.status!==expected) throw new Error(`Invalid health response: ${route}`);
++    console.log(`PASS ${route}`);
++  }
++  let homepage;
++  for(const route of ['/','/search?q=deployment','/admin/login']) {
++    const html=await (await get(route)).text();
++    // Next can stream an error boundary with HTTP 200; don't accept that as success.
++    if (/NEXT_HTTP_ERROR_FALLBACK|id="__next_error__"|"digest"\s*:\s*"\d+"|Không thể tải nội dung|Đã có lỗi xảy ra/i.test(html)) throw new Error(`Rendered error boundary: ${route}`);
++    if(route==='/') homepage=html;
++    console.log(`PASS rendered HTML ${route}`);
++  }
++  const assets=[...new Set([...homepage.matchAll(/(?:src|href)="(\/_next\/static\/[^"<>]+)"/g)].map(m=>m[1].replaceAll('&amp;','&')))];
++  for(const ext of ['.css','.js']) if(!assets.some(a=>a.split('?')[0].endsWith(ext))) throw new Error(`Missing ${ext} asset references.`);
++  for(const asset of assets) {
++    const r=await get(asset);
++    const type=r.headers.get('content-type') || '';
++    if(asset.split('?')[0].endsWith('.css') ? !type.includes('text/css') : asset.split('?')[0].endsWith('.js') && !/javascript/.test(type)) throw new Error('Incorrect static asset MIME type.');
++    await r.arrayBuffer();
++  }
++  console.log(`PASS ${assets.length} static assets including CSS and JavaScript`);
++} catch(error) { console.error(error.message); process.exitCode=1; }
+diff --git a/infra/vps.build.env.example b/infra/vps.build.env.example
+new file mode 100644
+index 0000000..4c899aa
+--- /dev/null
++++ b/infra/vps.build.env.example
+@@ -0,0 +1,9 @@
++# Copy to infra/.env.vps.compose and fill with real public configuration.
++# No service key/session secret belongs here. Rebuild when any NEXT_PUBLIC_* changes.
++NEXT_PUBLIC_SUPABASE_URL=https://supabase.example.com
++NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
++NEXT_PUBLIC_SUPABASE_ANON_KEY=
++NEXT_PUBLIC_SITE_URL=https://edu.example.com
++EDU_IMAGE_TAG=replace-with-release-tag
++EDU_HTTP_PORT=3000
++SUPABASE_DOCKER_NETWORK=replace-with-existing-network
+diff --git a/infra/vps.runtime.env.example b/infra/vps.runtime.env.example
+new file mode 100644
+index 0000000..c83aef3
+--- /dev/null
++++ b/infra/vps.runtime.env.example
+@@ -0,0 +1,10 @@
++# Copy to infra/.env.vps.runtime. Must match build values exactly.
++NEXT_PUBLIC_SUPABASE_URL=https://supabase.example.com
++NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
++NEXT_PUBLIC_SUPABASE_ANON_KEY=
++NEXT_PUBLIC_SITE_URL=https://edu.example.com
++# Replace with the verified gateway DNS name and container port on the shared network.
++SUPABASE_INTERNAL_URL=http://replace-with-gateway:8000
++SUPABASE_SERVICE_ROLE_KEY=
++# Preserve the existing secret when migrating an existing database.
++QUIZ_SESSION_SECRET=
+diff --git a/tests/deployment-image.test.ts b/tests/deployment-image.test.ts
+new file mode 100644
+index 0000000..d5e3dbb
+--- /dev/null
++++ b/tests/deployment-image.test.ts
+@@ -0,0 +1,29 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import { publicConfig, verifyRuntime } from '../infra/image-config.mjs';
++const local = {
++  NEXT_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:54321',
++  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'test-public-key',
++  NEXT_PUBLIC_SITE_URL: 'http://localhost:3000',
++  SUPABASE_INTERNAL_URL: 'http://host.docker.internal:54321',
++  SUPABASE_SERVICE_ROLE_KEY: 'test-service-only',
++  QUIZ_SESSION_SECRET: 'test-only-long-session-secret-123456789',
++  DEPLOYMENT_TARGET: 'local',
++};
++test('image contract rejects stale public URL, wrong target, loopback transport and missing secrets', () => {
++  const built = { ...publicConfig(local), deploymentTarget: 'local' };
++  assert.doesNotThrow(()=>verifyRuntime(local,built));
++  assert(!JSON.stringify(built).includes(local.SUPABASE_SERVICE_ROLE_KEY));
++  assert(!JSON.stringify(built).includes(local.QUIZ_SESSION_SECRET));
++  assert.throws(()=>verifyRuntime({...local,NEXT_PUBLIC_SITE_URL:'https://edu.example.com'},built),/mismatch/);
++  assert.throws(()=>verifyRuntime({...local,SUPABASE_INTERNAL_URL:'http://localhost:54321'},built),/loopback/);
++  assert.throws(()=>verifyRuntime({...local,QUIZ_SESSION_SECRET:''},built),/secret/);
++  assert.throws(()=>verifyRuntime({...local,DEPLOYMENT_TARGET:'vps'},built),/HTTPS|target/);
++});
++test('VPS build requires HTTPS public origins and never embeds privileged keys', () => {
++  assert.throws(()=>publicConfig({...local,DEPLOYMENT_TARGET:'vps'}),/HTTPS/);
++  assert.throws(()=>publicConfig({...local,NEXT_PUBLIC_SUPABASE_ANON_KEY:'sb_secret_test'}),/Privileged/);
++  const env={...local,DEPLOYMENT_TARGET:'vps',NEXT_PUBLIC_SITE_URL:'https://edu.example.com',NEXT_PUBLIC_SUPABASE_URL:'https://supabase.example.com',SUPABASE_INTERNAL_URL:'http://gateway:8000'};
++  const built={...publicConfig(env),deploymentTarget:'vps'};
++  assert.doesNotThrow(()=>verifyRuntime(env,built));
++});

@@ -1,0 +1,40 @@
+# App-only VPS template. Requires an existing Supabase gateway network and host reverse proxy.
+name: edu-vps-web
+services:
+  web:
+    image: edu-vps-web:${EDU_IMAGE_TAG:?Set a versioned image tag}
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        DEPLOYMENT_TARGET: vps
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:?Initialize deployment first}
+        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:-}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:?Initialize deployment first}
+    env_file:
+      - path: .env.vps.runtime
+        format: raw
+    environment:
+      DEPLOYMENT_TARGET: vps
+      NODE_ENV: production
+      APP_DATA_MODE: supabase
+      HOSTNAME: 0.0.0.0
+      PORT: '3000'
+    ports:
+      - '127.0.0.1:${EDU_HTTP_PORT:-3000}:3000'
+    networks: [supabase]
+    init: true
+    restart: unless-stopped
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+
+networks:
+  supabase:
+    external: true
+    name: ${SUPABASE_DOCKER_NETWORK:?Set the existing Supabase network name}

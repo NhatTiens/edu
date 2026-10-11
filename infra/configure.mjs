@@ -70,4 +70,4 @@ try {
     fs.writeFileSync(destinations[1],serialize(runtime),{flag:'wx',mode:0o600});
     console.log('Created private deployment environment. Existing source environment and secrets unchanged.');
   }
-} catch (error) { console.error(error instanceof Error && error.code ? 'Cannot access deployment configuration files.' : error.message); process.exitCode=1; }
+} catch (error) { console.error(error instanceof Error && error.code ? `Deployment configuration error (${error.code}). Check that the source .env.local exists and is readable; ERR_INVALID_URL means a URL is malformed.` : error.message); process.exitCode=1; }

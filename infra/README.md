@@ -63,3 +63,25 @@ Next.js: https://nextjs.org/docs/app/guides/self-hosting
 Docker: https://docs.docker.com/guides/nextjs/
 
 Docker Desktop: https://docs.docker.com/desktop/features/networking/networking-how-tos/
+
+## Image contract và healthcheck bổ sung
+
+Dockerfile chính nằm tại root, stages là deps, builder, runner; Compose đã trỏ tới file mới. Next experimental serverActions bodySizeLimit được giữ nguyên. Runtime chỉ copy standalone traced dependencies và static assets, không copy node_modules của deps/builder. Node chạy non-root và ghi log trực tiếp stdout/stderr. `restart: unless-stopped` xử lý process exit; Docker healthcheck báo unhealthy nhưng bản thân nó không tự restart container còn sống.
+
+`GET /api/health/live` kiểm tra Next API đang phục vụ, không phụ thuộc database. `GET /api/health/ready` dùng đúng server Supabase client, đọc tối đa một course ID, timeout 5 giây, trả 503 khi thiếu cấu hình/kết nối/quyền; response không chứa dữ liệu bản ghi hoặc chi tiết lỗi. Script smoke đọc các endpoint này, homepage/search/login và tải từng asset CSS/JS được tham chiếu trong homepage. Nó không submit quiz, thay database hoặc cấp quyền admin.
+
+Docker builder ghi manifest gồm cấu hình public đã được dùng lúc build. Entrypoint đối chiếu manifest với runtime environment, yêu cầu internal URL không phải loopback và kiểm tra có server secrets; nếu khác public URL/key/site URL hoặc target local/VPS thì container từ chối khởi động. Manifest không chứa service key hay session secret. Chạy `docker compose restart` không cập nhật bundle hay environment: phải build rồi up lại bằng đúng file cấu hình.
+
+## Build riêng cho VPS khi đã đủ điều kiện cutover
+
+Không dùng image local cho VPS. Chuẩn bị hai file riêng từ `infra/vps.build.env.example` và `infra/vps.runtime.env.example`, lưu thành `infra/.env.vps.compose` và `infra/.env.vps.runtime`. Điền cùng bộ NEXT_PUBLIC_* thật trong cả hai. Public origins của target VPS bắt buộc HTTPS và không được loopback. SUPABASE_DOCKER_NETWORK phải là network của gateway Supabase self-hosted hiện hữu; SUPABASE_INTERNAL_URL dùng đúng DNS gateway/container port trên network đó, không dùng địa chỉ PostgreSQL. Template không tạo hoặc thay đổi Supabase, backup, reverse proxy hay TLS.
+
+```bash
+docker compose --env-file infra/.env.vps.compose -f infra/compose.vps.yml config --quiet
+docker compose --env-file infra/.env.vps.compose -f infra/compose.vps.yml build web
+docker compose --env-file infra/.env.vps.compose -f infra/compose.vps.yml run --rm --no-deps web node infra/check-runtime.mjs
+docker compose --env-file infra/.env.vps.compose -f infra/compose.vps.yml up -d --no-deps --wait --wait-timeout 120 web
+docker compose --env-file infra/.env.vps.compose -f infra/compose.vps.yml exec -T web node infra/smoke-live.mjs
+```
+
+Các lệnh trên chỉ dành cho VPS đã có stack và backup/restore kiểm chứng. Gateway network là external nên Compose không tạo/xóa network đó. Web bind loopback để reverse proxy trên host phục vụ HTTPS. Nếu proxy là container, cần thiết kế thêm network cho proxy trước. Test URL HTTPS bên ngoài, login/refresh, upload và quiz thật sau khi bật proxy; smoke trong container không xác minh TLS/domain.

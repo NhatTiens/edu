@@ -57,3 +57,19 @@ Kiểm tra cấu hình trong thư mục tạm: PASS với secret chứa `$` và 
 Compose 2.30.3 `config --quiet`: PASS với môi trường giả tạm thời, không dùng Docker daemon. Audit PowerShell cũng đã chạy qua nhánh đầy đủ bằng mock Docker (container discovery, metadata, truy vấn chỉ đọc và đối chiếu version migration): PASS. Đây là kiểm tra script/config, không phải bằng chứng container Windows hoặc dữ liệu Supabase thật đang hoạt động.
 
 GitHub write integration trả HTTP 403 khi tạo tree; chưa tạo remote branch/PR và không có thay đổi trên GitHub. Bàn giao bằng patch dựa trên baseline b1e0d74; chạy `git apply --check` trước khi áp dụng vào checkout của người dùng. Không bypass quyền truy cập bằng phương thức khác.
+
+## Bổ sung Docker runtime lần 2 — 11/10/2026
+
+Tiếp tục từ patch local đã bàn giao, không làm lại sản phẩm. Theo log Windows do người dùng gửi, Docker Engine 29.5.3, Compose 5.1.4 và Linux/WSL2 đã chạy; ban đầu không có Supabase container/config hoặc .env.local. Sau đó người dùng báo đã chạy xong khởi tạo Supabase. Work chưa có log xác nhận migration/seed/start cuối cùng, chưa truy cập được credentials hoặc Docker daemon của Windows.
+
+Dockerfile được chuyển từ infra/Dockerfile ra root, stages đổi đúng deps/builder/runner, Node 22 bookworm slim. Runtime dùng standalone traced files, chạy user node, không npm install ở runner, không next dev; stdout/stderr giữ trực tiếp, Compose dùng init và restart unless-stopped. Giữ nguyên experimental serverActions 11mb và giao diện. Không sửa migration, seed hoặc dữ liệu.
+
+Thêm health API live (liveness) và ready (read-only Supabase SSR client, timeout 5 giây). Docker healthcheck chỉ dùng live để không đánh đồng DB outage với process chết. Live smoke kiểm tra ready, trang SSR, error boundary và CSS/JS với MIME đúng. Không có endpoint hoặc probe ghi dữ liệu trong các kiểm tra deployment mới.
+
+Browser Supabase client giữ nguyên public URL; server clients/proxy tiếp tục dùng transport nội bộ đã test ở patch trước, không làm thay đổi public Storage URL hoặc Auth cookie name. Container entrypoint bắt buộc internal URL khác loopback. Manifest public được tạo lúc build, runtime phải khớp chính xác URL/key/site URL và target; mismatches bị từ chối với hướng dẫn rebuild. Manifest và build args không chứa service key/session secret; .dockerignore bổ sung secret files và Supabase temporary state.
+
+Có Compose/template environment riêng cho VPS. Target VPS bắt buộc public HTTPS origins, không chấp nhận localhost, dùng external Supabase network hiện hữu. Không sao chép image local lên VPS. Các bước build lại, probe, up và smoke nằm trong infra/README.md; chưa deploy hoặc migrate VPS.
+
+Kết quả: typecheck PASS, lint PASS, 34/34 tests PASS, production standalone build PASS. Standalone kiểm tra live 200, readiness thiếu DB trả 503 không tiết lộ lỗi, login 200 và 11 static CSS/JS assets 200. Compose local/VPS config validation PASS bằng Compose 2.30.3, PowerShell script parser PASS. Không dùng mock database để khẳng định homepage hoặc Supabase thật hoạt động; unit/database suite có fixtures biệt lập như trước và không thay dữ liệu ứng dụng.
+
+Docker image build và container run trong Work: BLOCKED, `docker version` trả command not found (127), không có socket/remote context tới Windows. Homepage/Server Components với dữ liệu Supabase thật, Supabase server connection trong container và quiz API nghiệp vụ: CHƯA XÁC MINH trong lượt này. Chạy infra/scripts/Start-Local.ps1 trên Windows để build image, probe, khởi chạy container và smoke thật. Chỉ đánh dấu acceptance sau khi log các bước đó PASS; không reset DB khi có lỗi.
